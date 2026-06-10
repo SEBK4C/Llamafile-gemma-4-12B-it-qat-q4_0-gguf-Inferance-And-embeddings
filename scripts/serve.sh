@@ -18,6 +18,11 @@
 #                    prompts cannot split, so this caps embedding input length)
 #   GEMMA4_NGL       GPU layers             (default 999 = all, Metal on macOS)
 #   GEMMA4_VISION=1  also load the mmproj for image input (more RAM)
+#   GEMMA4_SPEC      speculative decoding   (default ngram-simple: model-free
+#                    self-speculation, ~+15% on edit/RAG-style outputs, neutral
+#                    on freeform prose; "none" disables; on machines with >24GB
+#                    pass GEMMA4_DRAFT=path/to/gemma-4-E2B_q4_0-it.gguf to use
+#                    classic draft-model speculation instead)
 set -eu
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -31,7 +36,11 @@ MMPROJ="${ROOT}/models/mmproj-gemma-4-12b-it-qat-q4_0.gguf"
 VISION_ARGS=""
 [ "${GEMMA4_VISION:-0}" = "1" ] && VISION_ARGS="--mmproj ${MMPROJ}"
 
+SPEC_ARGS="--spec-type ${GEMMA4_SPEC:-ngram-simple}"
+[ -n "${GEMMA4_DRAFT:-}" ] && SPEC_ARGS="--spec-type draft-simple -md ${GEMMA4_DRAFT}"
+
 exec "$BIN" --server \
+    $SPEC_ARGS \
     -m "$MODEL" \
     $VISION_ARGS \
     --embeddings \

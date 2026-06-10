@@ -72,6 +72,8 @@ cosine(v[0], v[1])
 | `GEMMA4_POOLING` | `mean` | `mean`, `last`, `cls`, `none` |
 | `GEMMA4_NGL` | `999` | GPU layers (Metal on macOS; see caveats) |
 | `GEMMA4_VISION` | unset | `1` loads the mmproj for image input (more RAM) |
+| `GEMMA4_SPEC` | `ngram-simple` | speculative decoding type (`none`, `ngram-simple`, `ngram-cache`, …) |
+| `GEMMA4_DRAFT` | unset | path to a draft GGUF (e.g. gemma-4-E2B) for classic draft-model speculation |
 
 ## Layout
 
@@ -109,6 +111,50 @@ The patch is maintained here rather than upstreamed because llama.cpp does not
 accept predominantly AI-generated contributions; if you want to report it
 upstream, the analysis above plus the patch file is everything you need.
 
+## Speculative decoding (and the MTP investigation)
+
+The server runs with **`--spec-type ngram-simple`** by default: model-free
+self-speculation that drafts continuations from n-gram matches over the
+prompt and prior output, verified by the target model. Measured on the M4
+(temperature 0, ngram-simple): freeform prose is unaffected (13.3 vs 13.4
+tok/s), while outputs that echo parts of the prompt — edits, RAG answers
+with quotes, code modification — run **~15-16%** faster (15.4 vs 13.3 tok/s).
+`ngram-cache` accepts more drafts (+19% on edits) but costs ~8% on prose, so
+it's opt-in: `GEMMA4_SPEC=ngram-cache make serve`, or `GEMMA4_SPEC=none` to
+disable. Embeddings are unaffected (the smoke test verifies this).
+
+**Why not true MTP?** Google ships an official drafter for this model
+([gemma-4-12B-it-assistant](https://huggingface.co/google/gemma-4-12B-it-assistant),
+423M params, "up to 3x"), and our llama.cpp vintage has a `draft-mtp` host
+(`--spec-type mtp`, with `mtp-*.gguf` sibling auto-discovery and a
+Qwen3.5-style split-MTP converter). They are not compatible: the Qwen-style
+MTP head self-attends over its own KV cache and consumes *pre-norm* target
+hidden states, while Gemma 4's `Gemma4UnifiedAssistantForCausalLM` has **no
+K/V projections at all** — all 4 drafter layers cross-attend directly to the
+*backbone's* K/V states (post-RoPE K, normed V from the 12B's last
+non-shared sliding and full-attention layers, over the whole context), takes
+*post-norm* hidden states concatenated with the target's scaled token
+embeddings (2×3840→1024), and carries recurrence through a 1024→3840
+`post_projection`. llama.cpp's memory model is strictly per-context — there
+is no mechanism for a drafter context to read the target context's KV cache —
+so a faithful port needs a new cross-context KV-sharing mechanism in core
+llama.cpp plus a new arch, converter and host protocol. That's core-surgery
+scale, not a patch; we documented the full analysis instead and use what
+works today.
+
+**Classic draft-model speculation** (for machines with >24 GB unified/GPU
+memory): `gemma-4-E2B-it-qat-q4_0-gguf` (arch `gemma4`, same 262k vocab,
+4.6 GB) works as a conventional drafter:
+
+```sh
+./scripts/fetch-model.sh --draft
+GEMMA4_DRAFT=models/gemma-4-E2B_q4_0-it.gguf make serve
+```
+
+Not packaged into the single-file build: it would grow the file to ~11 GB,
+and on 16 GB machines both models can't share the Metal budget (the drafter
+would fall to CPU and draft slower than the target generates).
+
 ## Publishing the packaged llamafile
 
 `dist/gemma4-server.llamafile` (6.5 GB) is too big for GitHub (100 MB file
@@ -145,9 +191,11 @@ the card — mirror that in your model card.
 - **Embedding input length** is capped by `GEMMA4_UBATCH` (default 2048
   tokens) because pooled sequences can't split across physical batches.
 - **Metal partial offload is broken** in llamafile 0.10.3 for this model:
-  letting the auto-fit pick a partial layer split fails with
-  `graph_compute` errors. Use full offload (`-ngl 999`, our default) or CPU
-  (`-ngl 0`). First GPU run compiles the Metal module via Xcode CLT.
+  when the auto-fit picks a partial layer split (typically because another
+  instance is already holding GPU memory — e.g. two copies of this server),
+  generation fails with `graph_compute` errors. Use full offload (`-ngl 999`,
+  our default) or CPU (`-ngl 0`), and run one instance per GPU. First GPU run
+  compiles the Metal module via Xcode CLT.
 - **Windows** can't run executables >4 GB, so the packaged file won't work
   there — use `bin/llamafile` (or a release binary) with external weights.
 - ~16 GB RAM recommended: weights are ~7 GB plus KV/compute buffers.

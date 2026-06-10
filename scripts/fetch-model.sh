@@ -21,4 +21,11 @@ fetch() {
 fetch gemma-4-12b-it-qat-q4_0.gguf          # 6.98 GB — text model
 fetch mmproj-gemma-4-12b-it-qat-q4_0.gguf   # 175 MB  — vision projector (optional)
 
+# --draft: also fetch gemma-4-E2B (4.6 GB) for classic draft-model speculation.
+# Only worth it on machines with >24 GB unified/GPU memory; see README.
+if [ "${1:-}" = "--draft" ]; then
+    BASE="https://huggingface.co/google/gemma-4-E2B-it-qat-q4_0-gguf/resolve/main"
+    fetch gemma-4-E2B_q4_0-it.gguf
+fi
+
 echo "Done. Weights in ${DEST}/"
