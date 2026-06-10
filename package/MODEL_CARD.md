@@ -46,6 +46,9 @@ CLI flags override the baked-in defaults (`--port 9000`, `-c 16384`, …).
 - Defaults: ctx 8192, 2 parallel slots, ubatch 2048 (caps embedding input
   length), full GPU offload (`-ngl 999`; Metal on macOS — first run compiles
   the Metal module via Xcode CLT; use `-ngl 0` for CPU).
+- Speculative decoding on by default (`--spec-type ngram-simple`, model-free
+  self-speculation): ~15% faster on outputs that echo the prompt (edits,
+  RAG, code changes), neutral on freeform prose. `--spec-type none` disables.
 - Includes a llama.cpp patch fixing pooled embeddings for mixed-length
   batches under Gemma 4's sliding-window KV cache (without it, batch
   composition silently changes embedding values).
