@@ -1,0 +1,33 @@
+Subject: server: distinguish media content from multimodal capability in server_tokens
+
+Adds server_tokens::has_media() (any media chunks actually present) and
+relaxes the get_tokens() assert to it: has_mtmd is set for every slot
+whenever multimodal is enabled, so asserting on it forbade raw token
+access even for plain text sequences. Companion to 0007.
+
+--- a/tools/server/server-common.h
++++ b/tools/server/server-common.h
+@@ -179,6 +179,10 @@
+     size_t size_up_to_pos(llama_pos max_pos) const;
+ 
+     const mtmd::input_chunk_ptr & find_chunk(size_t idx) const;
++
++    // whether any media chunks are present (has_mtmd only says the
++    // capability is enabled, not that this sequence contains media)
++    bool has_media() const { return !map_idx_to_media.empty(); }
+ 
+     void push_back(llama_token tok);
+ 
+--- a/tools/server/server-common.cpp
++++ b/tools/server/server-common.cpp
+@@ -395,7 +395,9 @@
+ }
+ 
+ const llama_tokens & server_tokens::get_tokens() const {
+-    GGML_ASSERT(!has_mtmd);
++    // raw token access is fine as long as no media chunks are present;
++    // has_mtmd only means the capability is enabled
++    GGML_ASSERT(!has_media());
+     return tokens;
+ }
+ 

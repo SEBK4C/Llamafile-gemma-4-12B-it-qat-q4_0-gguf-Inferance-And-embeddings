@@ -1,0 +1,57 @@
+Subject: server: gate slot save on media content, not multimodal capability
+
+The slot save/restore/erase tasks were rejected whenever --mmproj was
+loaded (check_no_mtmd tests the capability, not the content), which
+made KV state persistence unusable on multimodal servers. Only saving
+a state that actually CONTAINS media chunks is unsupported (they can't
+be serialized); restoring (files are text-only by construction) and
+erasing are always safe.
+
+--- a/tools/server/server-context.cpp
++++ b/tools/server/server-context.cpp
+@@ -2146,10 +2146,6 @@
+                 } break;
+             case SERVER_TASK_TYPE_SLOT_SAVE:
+                 {
+-                    if (!check_no_mtmd(task.id)) {
+-                        break;
+-                    }
+-
+                     const int id_slot = task.slot_action.id_slot;
+                     server_slot * slot = get_slot_by_id(id_slot);
+                     if (slot == nullptr) {
+@@ -2160,6 +2156,12 @@
+                         // if requested slot is unavailable, we defer this task for processing later
+                         SRV_DBG("requested slot is unavailable, defer task, id_task = %d\n", task.id);
+                         queue_tasks.defer(std::move(task));
++                        break;
++                    }
++                    // media chunks can't be serialized — only text-only slot
++                    // states are savable; other slots stay usable as normal
++                    if (slot->prompt.tokens.has_media()) {
++                        send_error(task, "Cannot save a slot state that contains multimodal data", ERROR_TYPE_NOT_SUPPORTED);
+                         break;
+                     }
+ 
+@@ -2187,7 +2189,9 @@
+                 } break;
+             case SERVER_TASK_TYPE_SLOT_RESTORE:
+                 {
+-                    if (!check_no_mtmd(task.id)) break;
++                    // state files only ever contain text-only token sequences
++                    // (saving media slots is refused above), so restoring is
++                    // safe regardless of whether multimodal is loaded
+                     const int id_slot = task.slot_action.id_slot;
+                     server_slot * slot = get_slot_by_id(id_slot);
+                     if (slot == nullptr) {
+@@ -2234,9 +2238,7 @@
+                 } break;
+             case SERVER_TASK_TYPE_SLOT_ERASE:
+                 {
+-                    if (!check_no_mtmd(task.id)) {
+-                        break;
+-                    }
++                    // erasing a slot is safe regardless of media content
+                     const int id_slot = task.slot_action.id_slot;
+                     server_slot * slot = get_slot_by_id(id_slot);
+                     if (slot == nullptr) {

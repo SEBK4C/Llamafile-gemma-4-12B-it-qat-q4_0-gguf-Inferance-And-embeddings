@@ -1,6 +1,9 @@
 --server
 -m
 /zip/gemma-4-12b-it-qat-q4_0.gguf
+--mmproj
+/zip/mmproj-gemma-4-12b-it-qat-q4_0.gguf
+--no-mmproj-offload
 --embeddings
 --pooling
 mean

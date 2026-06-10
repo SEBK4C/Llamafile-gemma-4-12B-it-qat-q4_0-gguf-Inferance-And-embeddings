@@ -10,14 +10,15 @@ tags:
 - embeddings
 ---
 
-# Gemma 4 12B IT (QAT q4_0) — dual-mode llamafile
+# Gemma 4 12B IT (QAT q4_0) — multimodal dual-mode llamafile
 
-A single self-contained executable that serves **chat completions and
-embeddings from one model instance** — one set of weights in memory, one
-port. Built on [mozilla-ai/llamafile](https://github.com/mozilla-ai/llamafile)
+A single self-contained executable that serves **chat completions (text +
+image + audio input) and embeddings from one model instance** — one set of
+weights in memory, one port. Built on
+[mozilla-ai/llamafile](https://github.com/mozilla-ai/llamafile)
 v0.10.3 with [google/gemma-4-12B-it-qat-q4_0-gguf](https://huggingface.co/google/gemma-4-12B-it-qat-q4_0-gguf)
-weights baked in. Runs on macOS, Linux and BSD, on arm64 and x86_64, with no
-installation.
+weights and the multimodal projector baked in. Runs on macOS, Linux and BSD,
+on arm64 and x86_64, with no installation.
 
 ## Usage
 
@@ -38,6 +39,11 @@ curl http://127.0.0.1:8080/v1/chat/completions -H 'Content-Type: application/jso
 curl http://127.0.0.1:8080/v1/embeddings -H 'Content-Type: application/json' \
   -d '{"input":["the sky is blue","der Himmel ist blau"]}'
 ```
+
+Images and audio go in as standard OpenAI content parts on the same chat
+endpoint: `{"type":"image_url","image_url":{"url":"data:image/png;base64,..."}}`
+and `{"type":"input_audio","input_audio":{"data":"<base64>","format":"wav"}}`
+(wav or mp3; decoding, resizing and 16 kHz frame chunking happen server-side).
 
 CLI flags override the baked-in defaults (`--port 9000`, `-c 16384`, …).
 

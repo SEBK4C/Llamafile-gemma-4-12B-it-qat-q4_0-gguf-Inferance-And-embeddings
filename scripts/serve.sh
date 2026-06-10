@@ -17,7 +17,10 @@
 #   GEMMA4_UBATCH    physical batch         (default 2048; pooled embedding
 #                    prompts cannot split, so this caps embedding input length)
 #   GEMMA4_NGL       GPU layers             (default 999 = all, Metal on macOS)
-#   GEMMA4_VISION=1  also load the mmproj for image input (more RAM)
+#   GEMMA4_MM=0      disable multimodal (image + audio) input; on by default.
+#                    The projector runs on CPU (--no-mmproj-offload): it is a
+#                    thin encoder-free projection, and the Metal conv kernels
+#                    of this ggml vintage assert on its op shapes.
 #   GEMMA4_SPEC      speculative decoding   (default ngram-simple: model-free
 #                    self-speculation, ~+15% on edit/RAG-style outputs, neutral
 #                    on freeform prose; "none" disables; on machines with >24GB
@@ -34,7 +37,7 @@ MMPROJ="${ROOT}/models/mmproj-gemma-4-12b-it-qat-q4_0.gguf"
 [ -f "$MODEL" ] || { echo "error: $MODEL missing — run 'make model' first" >&2; exit 1; }
 
 VISION_ARGS=""
-[ "${GEMMA4_VISION:-0}" = "1" ] && VISION_ARGS="--mmproj ${MMPROJ}"
+[ "${GEMMA4_MM:-1}" = "1" ] && [ -f "$MMPROJ" ] && VISION_ARGS="--mmproj ${MMPROJ} --no-mmproj-offload"
 
 SPEC_ARGS="--spec-type ${GEMMA4_SPEC:-ngram-simple}"
 [ -n "${GEMMA4_DRAFT:-}" ] && SPEC_ARGS="--spec-type draft-simple -md ${GEMMA4_DRAFT}"

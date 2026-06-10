@@ -8,7 +8,7 @@ one set of weights in memory, one KV cache, one port:
 
 | Endpoint | What it does |
 |---|---|
-| `POST /v1/chat/completions` | OpenAI-style chat (Gemma 4 chat template, thinking channel in `reasoning_content`) |
+| `POST /v1/chat/completions` | OpenAI-style chat (Gemma 4 chat template, thinking channel in `reasoning_content`) — accepts text, **images** (`image_url` data URIs) and **audio** (`input_audio`, wav/mp3) |
 | `POST /v1/embeddings` | OpenAI-style embeddings (3840-dim, mean-pooled, L2-normalized) |
 | `GET /health`, `POST /tokenize`, … | usual llama-server extras |
 
@@ -71,7 +71,7 @@ cosine(v[0], v[1])
 | `GEMMA4_UBATCH` | `2048` | physical batch; pooled embedding inputs can't split, so this caps embedding input length |
 | `GEMMA4_POOLING` | `mean` | `mean`, `last`, `cls`, `none` |
 | `GEMMA4_NGL` | `999` | GPU layers (Metal on macOS; see caveats) |
-| `GEMMA4_VISION` | unset | `1` loads the mmproj for image input (more RAM) |
+| `GEMMA4_MM` | `1` | image + audio input via the mmproj; `0` for text-only |
 | `GEMMA4_SPEC` | `ngram-simple` | speculative decoding type (`none`, `ngram-simple`, `ngram-cache`, …) |
 | `GEMMA4_DRAFT` | unset | path to a draft GGUF (e.g. gemma-4-E2B) for classic draft-model speculation |
 
@@ -154,6 +154,37 @@ GEMMA4_DRAFT=models/gemma-4-E2B_q4_0-it.gguf make serve
 Not packaged into the single-file build: it would grow the file to ~11 GB,
 and on 16 GB machines both models can't share the Metal budget (the drafter
 would fall to CPU and draft slower than the target generates).
+
+## Image and audio input
+
+Multimodal input is on by default (`GEMMA4_MM=0` disables). Gemma 4's
+multimodality is *encoder-free*: the 175 MB
+`mmproj-gemma-4-12b-it-qat-q4_0.gguf` contains no vision/audio towers
+(`block_count = 0`), just projections — images become raw 224px/16px
+patches and audio becomes raw 16 kHz waveform chopped into 640-sample
+(40 ms) frames, all understood by the 12B backbone itself. Preprocessing
+(image decode/resize, WAV/MP3 decode, frame chunking) happens inside the
+server via the mtmd API, so clients just send standard OpenAI content parts:
+
+```jsonc
+// image
+{"type": "image_url", "image_url": {"url": "data:image/png;base64,...."}}
+// audio (wav or mp3)
+{"type": "input_audio", "input_audio": {"data": "<base64>", "format": "wav"}}
+```
+
+Verified on this machine: exact color/position grounding on synthetic
+images, and word-perfect transcription of spoken audio (`say`-generated,
+16 kHz mono WAV). ~19-28 s per image/audio turn on the M4 (the projector
+runs on CPU — `--no-mmproj-offload` — because this ggml vintage's Metal
+conv kernels assert on the projector's op shapes; the 12B stays on Metal).
+
+Support required backporting upstream commit `a731805ced` (the `gemma4uv`
+/ `gemma4ua` unified projector types postdate our llama.cpp pin) — carried
+as `patches/0005` + `0006`. Two more patches (`0007`, `0008`) make KV
+persistence coexist with multimodal: slot save is now refused only for
+slots whose state actually *contains* media (which can't be serialized),
+instead of whenever multimodal is merely enabled.
 
 ## KV cache persistence (hidden dir next to the llamafile)
 

@@ -14,12 +14,14 @@ set -eu
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 MODEL="${ROOT}/models/gemma-4-12b-it-qat-q4_0.gguf"
+MMPROJ="${ROOT}/models/mmproj-gemma-4-12b-it-qat-q4_0.gguf"
 OUT="${ROOT}/dist/gemma4-server.llamafile"
 
 for f in "${ROOT}/bin/llamafile" "${ROOT}/bin/zipalign"; do
     [ -x "$f" ] || { echo "error: $f missing — run 'make build' first" >&2; exit 1; }
 done
-[ -f "$MODEL" ] || { echo "error: $MODEL missing — run 'make model' first" >&2; exit 1; }
+[ -f "$MODEL" ]  || { echo "error: $MODEL missing — run 'make model' first" >&2; exit 1; }
+[ -f "$MMPROJ" ] || { echo "error: $MMPROJ missing — run 'make model' first" >&2; exit 1; }
 
 mkdir -p "${ROOT}/dist"
 cp "${ROOT}/bin/llamafile" "$OUT"
@@ -30,7 +32,7 @@ trap 'rm -rf "$TMP"' EXIT
 cp "${ROOT}/package/gemma4.args" "${TMP}/.args"
 
 # -j0: store aligned + uncompressed so weights mmap directly from the zip
-"${ROOT}/bin/zipalign" -j0 "$OUT" "$MODEL" "${TMP}/.args"
+"${ROOT}/bin/zipalign" -j0 "$OUT" "$MODEL" "$MMPROJ" "${TMP}/.args"
 chmod +x "$OUT"
 
 echo "Built $(du -h "$OUT" | cut -f1) $(basename "$OUT")"
