@@ -186,6 +186,36 @@ persistence coexist with multimodal: slot save is now refused only for
 slots whose state actually *contains* media (which can't be serialized),
 instead of whenever multimodal is merely enabled.
 
+### Cross-modal embeddings (and the modality gap)
+
+`/v1/embeddings` also accepts media, using the server's tokenizer object
+format (fetch the per-process marker from `/props`):
+
+```json
+{"input": {"prompt_string": "<__media_...__>", "multimodal_data": ["<base64 png/wav/mp3>"]}}
+```
+
+`tests/modality_gap.py` embeds the same sentences as text, rendered onto
+images, and spoken aloud (macOS `say`). What we measured (3 topics): the
+embedding space is dominated by **modality, not content** — same-modality
+pairs score 0.55–0.94 while cross-modal pairs of the *same sentence* sit at
+0.3–0.6, and raw cross-modal retrieval is barely above chance. The
+modality drift is a large (|d| ≈ 1.0–1.15 on unit vectors), *partially*
+consistent offset: image-drift directions agree at cos 0.69–0.81 across
+topics, audio-drift only 0.46–0.53, and image vs audio drifts point in
+different directions (cos 0.48). Subtracting the mean offset (the classic
+modality-gap correction) helps only marginally (2/6 → 3/6 retrieval) —
+unlike contrastively-trained encoders, this generative model's modality
+gap is not a clean parallel translation, so cross-modal retrieval needs a
+trained alignment, not a geometric fix. Caveat: render text ≥26px on
+224px images — the vision input is 224²/16px patches and smaller text is
+only partially legible to the model (verify with an OCR prompt first).
+
+**Metal caveat**: media inputs on the *embeddings* endpoint currently
+segfault the Metal backend (chat with media is fine; text embeddings are
+fine). Run `GEMMA4_NGL=0 make serve` for cross-modal embedding work until
+this is fixed.
+
 ## KV cache persistence (hidden dir next to the llamafile)
 
 The server's in-RAM prompt cache dies with the process. We additionally
