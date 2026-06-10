@@ -195,6 +195,9 @@ format (fetch the per-process marker from `/props`):
 {"input": {"prompt_string": "<__media_...__>", "multimodal_data": ["<base64 png/wav/mp3>"]}}
 ```
 
+Full writeup with tables, practical guidance and dev notes (candidate HF
+datasets for a learned alignment): [docs/mm-embedding.md](docs/mm-embedding.md).
+
 `tests/modality_gap.py` embeds the same sentences as text, rendered onto
 images, and spoken aloud (macOS `say`). What we measured (3 topics): the
 embedding space is dominated by **modality, not content** — same-modality
