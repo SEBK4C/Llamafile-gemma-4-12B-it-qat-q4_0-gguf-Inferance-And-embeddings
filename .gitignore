@@ -1,6 +1,9 @@
 # Model weights (fetched via `make model`, ~7.1 GB)
 models/
 
+# Agent scratch space (upstream clones, venvs, conversion temp)
+.scratch/
+
 # Built artifacts (built via `make build` / `make package`)
 bin/
 dist/
