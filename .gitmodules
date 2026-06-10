@@ -1,0 +1,3 @@
+[submodule "vendor/llamafile"]
+	path = vendor/llamafile
+	url = https://github.com/mozilla-ai/llamafile.git

@@ -1,0 +1,89 @@
+Subject: pooled embeddings: one sequence per ubatch in attention KV caches
+
+When a batch contains pooled-embedding sequences of unequal length, the
+unified/iSWA attention caches split it with split_equal(), which can spread
+a sequence across multiple ubatches. Pooling runs per ubatch and the last
+ubatch's result overwrites the previous ones, so the returned "mean"
+embedding only covers the trailing tokens of the longest sequence(s).
+
+Repro (server, gemma4, --embeddings --pooling mean, -np 2): embedding a
+10-token and a 13-token text in one request returns, for the longer text,
+exactly mean(tokens[10:13]) instead of mean(tokens[0:13]).
+
+Fix: honor the embd_all flag (as llama_memory_hybrid and the recurrent
+cache already do) by using split_seq(), which keeps each sequence whole
+within a ubatch.
+
+diff --git a/src/llama-kv-cache-iswa.cpp b/src/llama-kv-cache-iswa.cpp
+index 26e2cb4..f039483 100644
+--- a/src/llama-kv-cache-iswa.cpp
++++ b/src/llama-kv-cache-iswa.cpp
+@@ -124,7 +124,42 @@ std::map<ggml_backend_buffer_type_t, size_t> llama_kv_cache_iswa::memory_breakdo
+ }
+ 
+ llama_memory_context_ptr llama_kv_cache_iswa::init_batch(llama_batch_allocr & balloc, uint32_t n_ubatch, bool embd_all) {
+-    GGML_UNUSED(embd_all);
++    // if all tokens are output (pooled embeddings), split by sequence so that a
++    // sequence never spans multiple ubatches — otherwise the pooled embedding
++    // only covers the tokens of its final ubatch
++    if (embd_all) {
++        balloc.split_reset();
++
++        std::vector<llama_ubatch> ubatches;
++        while (true) {
++            auto ubatch = balloc.split_seq(n_ubatch);
++
++            if (ubatch.n_tokens == 0) {
++                break;
++            }
++
++            ubatches.push_back(std::move(ubatch)); // NOLINT
++        }
++
++        if (balloc.get_n_used() < balloc.get_n_tokens()) {
++            return std::make_unique<llama_kv_cache_iswa_context>(LLAMA_MEMORY_STATUS_FAILED_PREPARE);
++        }
++
++        auto sinfos_base = kv_base->prepare(ubatches);
++        if (sinfos_base.empty()) {
++            return std::make_unique<llama_kv_cache_iswa_context>(LLAMA_MEMORY_STATUS_FAILED_PREPARE);
++        }
++
++        auto sinfos_swa = kv_swa->prepare(ubatches);
++        if (sinfos_swa.empty()) {
++            return std::make_unique<llama_kv_cache_iswa_context>(LLAMA_MEMORY_STATUS_FAILED_PREPARE);
++        }
++
++        assert(sinfos_base.size() == sinfos_swa.size());
++
++        return std::make_unique<llama_kv_cache_iswa_context>(
++                this, std::move(sinfos_base), std::move(sinfos_swa), std::move(ubatches));
++    }
+ 
+     // first try simple split
+     do {
+diff --git a/src/llama-kv-cache.cpp b/src/llama-kv-cache.cpp
+index a49a055..b5a7ca1 100644
+--- a/src/llama-kv-cache.cpp
++++ b/src/llama-kv-cache.cpp
+@@ -628,14 +628,17 @@ llama_memory_context_ptr llama_kv_cache::init_batch(
+             llama_batch_allocr & balloc,
+             uint32_t n_ubatch,
+             bool embd_all) {
+-    GGML_UNUSED(embd_all);
+-
+     do {
+         balloc.split_reset();
+ 
+         std::vector<llama_ubatch> ubatches;
+         while (true) {
+-            auto ubatch = n_stream == 1 ? balloc.split_simple(n_ubatch) : balloc.split_equal(n_ubatch, true);
++            // if all tokens are output (pooled embeddings), split by sequence so
++            // that a sequence never spans multiple ubatches — otherwise the
++            // pooled embedding only covers the tokens of its final ubatch
++            auto ubatch = embd_all      ? balloc.split_seq(n_ubatch)
++                        : n_stream == 1 ? balloc.split_simple(n_ubatch)
++                                        : balloc.split_equal(n_ubatch, true);
+ 
+             if (ubatch.n_tokens == 0) {
+                 break;
