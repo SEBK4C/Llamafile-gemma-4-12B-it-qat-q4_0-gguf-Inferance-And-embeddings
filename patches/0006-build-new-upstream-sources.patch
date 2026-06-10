@@ -1,0 +1,70 @@
+Subject: BUILD.mk: compile sources added upstream between dbe9c0c and 04eb4c44
+
+Replaces dropped patches 0005/0006: the gemma4 unified-projector backport
+(a731805ced) is an ancestor of the new pin, so the sources are upstream now;
+this patch only registers the files added in the 208 intervening commits
+with the cosmocc build (upstream added them in CMakeLists.txt, which this
+build does not use): gemma4-assistant (Gemma4 MTP drafter), deepseek32,
+mellum, llama-kv-cache-dsa, imatrix-loader, and five new mtmd projector
+models including gemma4ua/gemma4uv.
+
+--- a/BUILD.mk
++++ b/BUILD.mk
+@@ -74,6 +74,7 @@
+ 	llama.cpp/src/models/deepseek.cpp \
+ 	llama.cpp/src/models/deepseek2.cpp \
+ 	llama.cpp/src/models/deepseek2ocr.cpp \
++	llama.cpp/src/models/deepseek32.cpp \
+ 	llama.cpp/src/models/delta-net-base.cpp \
+ 	llama.cpp/src/models/dots1.cpp \
+ 	llama.cpp/src/models/dream.cpp \
+@@ -90,6 +91,7 @@
+ 	llama.cpp/src/models/gemma2.cpp \
+ 	llama.cpp/src/models/gemma3.cpp \
+ 	llama.cpp/src/models/gemma3n.cpp \
++	llama.cpp/src/models/gemma4-assistant.cpp \
+ 	llama.cpp/src/models/gemma4.cpp \
+ 	llama.cpp/src/models/glm-dsa.cpp \
+ 	llama.cpp/src/models/glm4-moe.cpp \
+@@ -122,6 +124,7 @@
+ 	llama.cpp/src/models/maincoder.cpp \
+ 	llama.cpp/src/models/mamba.cpp \
+ 	llama.cpp/src/models/mamba2.cpp \
++	llama.cpp/src/models/mellum.cpp \
+ 	llama.cpp/src/models/mimo2.cpp \
+ 	llama.cpp/src/models/minicpm.cpp \
+ 	llama.cpp/src/models/minicpm3.cpp \
+@@ -192,6 +195,7 @@
+ 	llama.cpp/src/llama-hparams.cpp \
+ 	llama.cpp/src/llama-impl.cpp \
+ 	llama.cpp/src/llama-io.cpp \
++	llama.cpp/src/llama-kv-cache-dsa.cpp \
+ 	llama.cpp/src/llama-kv-cache-iswa.cpp \
+ 	llama.cpp/src/llama-kv-cache.cpp \
+ 	llama.cpp/src/llama-memory-hybrid.cpp \
+@@ -227,6 +231,7 @@
+ 	llama.cpp/common/download.cpp \
+ 	llama.cpp/common/fit.cpp \
+ 	llama.cpp/common/hf-cache.cpp \
++	llama.cpp/common/imatrix-loader.cpp \
+ 	llama.cpp/common/jinja/caps.cpp \
+ 	llama.cpp/common/jinja/lexer.cpp \
+ 	llama.cpp/common/jinja/parser.cpp \
+@@ -302,12 +307,17 @@
+ 	llama.cpp/tools/mtmd/mtmd-image.cpp \
+ 	llama.cpp/tools/mtmd/models/cogvlm.cpp \
+ 	llama.cpp/tools/mtmd/models/deepseekocr.cpp \
++	llama.cpp/tools/mtmd/models/deepseekocr2.cpp \
+ 	llama.cpp/tools/mtmd/models/conformer.cpp \
+ 	llama.cpp/tools/mtmd/models/dotsocr.cpp \
++	llama.cpp/tools/mtmd/models/exaone4_5.cpp \
+ 	llama.cpp/tools/mtmd/models/gemma4a.cpp \
++	llama.cpp/tools/mtmd/models/gemma4ua.cpp \
++	llama.cpp/tools/mtmd/models/gemma4uv.cpp \
+ 	llama.cpp/tools/mtmd/models/gemma4v.cpp \
+ 	llama.cpp/tools/mtmd/models/glm4v.cpp \
+ 	llama.cpp/tools/mtmd/models/granite-speech.cpp \
++	llama.cpp/tools/mtmd/models/granite4-vision.cpp \
+ 	llama.cpp/tools/mtmd/models/hunyuanvl.cpp \
+ 	llama.cpp/tools/mtmd/models/internvl.cpp \
+ 	llama.cpp/tools/mtmd/models/kimik25.cpp \
