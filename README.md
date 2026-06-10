@@ -109,6 +109,32 @@ The patch is maintained here rather than upstreamed because llama.cpp does not
 accept predominantly AI-generated contributions; if you want to report it
 upstream, the analysis above plus the patch file is everything you need.
 
+## Publishing the packaged llamafile
+
+`dist/gemma4-server.llamafile` (6.5 GB) is too big for GitHub (100 MB file
+cap; LFS free tier 2 GB), so this repo ships code only — weights and packaged
+binaries are gitignored. Hugging Face model repos are the natural home for
+the artifact (it's where mozilla-ai publishes their prebuilt llamafiles):
+
+```sh
+pip install -U huggingface_hub
+hf auth login
+hf repo create gemma-4-12b-it-qat-q4_0-llamafile --type model
+hf upload <your-username>/gemma-4-12b-it-qat-q4_0-llamafile \
+    dist/gemma4-server.llamafile gemma4-server.llamafile
+```
+
+Downstream users then need exactly two commands:
+
+```sh
+curl -LO https://huggingface.co/<your-username>/gemma-4-12b-it-qat-q4_0-llamafile/resolve/main/gemma4-server.llamafile
+chmod +x gemma4-server.llamafile && ./gemma4-server.llamafile
+```
+
+If you publish, note the model weights are Apache 2.0 with Google's
+[Gemma 4 license link](https://ai.google.dev/gemma/docs/gemma_4_license) on
+the card — mirror that in your model card.
+
 ## Caveats
 
 - **Embedding quality**: Gemma 4 12B IT is a generative model, not a
