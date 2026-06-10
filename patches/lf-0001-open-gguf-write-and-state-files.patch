@@ -1,0 +1,39 @@
+Subject: llamafile_open_gguf: support write modes and non-gguf payload files
+
+llama_file in the 0.10.x overlay routes every open through
+llamafile_open_gguf, which validated a GGUF/zip magic on all opens.
+That broke the server's --slot-save-path KV state files both ways:
+"wb" opens created the file and then failed the 8-byte magic read
+(empty file), and "rb" opens of state files fell through to the
+.zip/.llamafile branch and failed. Write modes now bypass validation
+entirely, and reads of files that are neither gguf nor zip/APE are
+handed back as plain files.
+
+--- a/llamafile/llamafile.c
++++ b/llamafile/llamafile.c
+@@ -271,6 +271,11 @@
+ }
+ 
+ struct llamafile *llamafile_open_gguf(const char *fname, const char *mode) {
++
++    // write modes can't be validated by magic and never refer to zip
++    // members (e.g. the server saving slot KV state via llama_file)
++    if (strpbrk(mode, "wa"))
++        return llamafile_open_file(fname, mode);
+ 
+     // support filenames like `foo.zip@weights.gguf`
+     const char *p;
+@@ -310,6 +315,13 @@
+     }
+     if (ZIP_READ32(buf) == ZIP_READ32("GGUF") || ZIP_READ32(buf) == ZIP_READ32("ggml")) {
+         errno = EINVAL;
++        return file;
++    }
++
++    // not a gguf and not a .zip/.llamafile (PK / MZ magic): hand back the
++    // plain file so callers can read non-gguf payloads like slot KV state
++    if (ZIP_READ32(buf) != ZIP_READ32("PK\3\4") && !(buf[0] == 'M' && buf[1] == 'Z')) {
++        llamafile_seek(file, 0, SEEK_SET);
+         return file;
+     }
+ 

@@ -49,6 +49,11 @@ CLI flags override the baked-in defaults (`--port 9000`, `-c 16384`, …).
 - Speculative decoding on by default (`--spec-type ngram-simple`, model-free
   self-speculation): ~15% faster on outputs that echo the prompt (edits,
   RAG, code changes), neutral on freeform prose. `--spec-type none` disables.
+- KV cache persistence: slot state survives restarts via a hidden
+  `.gemma4-kv/` dir created where you launch the file —
+  `POST /slots/{id}?action=save|restore` with `{"filename":"name.bin"}`.
+  A restored long system prompt skips re-processing entirely (~45× faster
+  time-to-first-token in our test).
 - Includes a llama.cpp patch fixing pooled embeddings for mixed-length
   batches under Gemma 4's sliding-window KV cache (without it, batch
   composition silently changes embedding values).

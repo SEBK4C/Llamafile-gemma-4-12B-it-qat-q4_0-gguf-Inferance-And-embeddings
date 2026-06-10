@@ -1,0 +1,25 @@
+Subject: server: create --slot-save-path directory when missing
+
+--slot-save-path rejected paths that don't exist yet, which makes it
+impossible to bake the flag into a packaged llamafile's default args
+(the target directory can't be pre-created on the user's machine).
+Create it instead, and only error if creation also fails. The trailing
+separator matters: fs_create_directory_with_parents only creates path
+components that are terminated by a separator, so without it only the
+parents of the requested directory would be created.
+
+diff --git a/common/arg.cpp b/common/arg.cpp
+--- a/common/arg.cpp
++++ b/common/arg.cpp
+@@ -3089,7 +3089,10 @@ common_params_context common_params_parser_init(common_params & params, llama_ex
+         "path to save slot kv cache (default: disabled)",
+         [](common_params & params, const std::string & value) {
+             params.slot_save_path = value;
+-            if (!fs_is_directory(params.slot_save_path)) {
++            // note: trailing separator required — fs_create_directory_with_parents
++            // only creates components terminated by a separator
++            if (!fs_is_directory(params.slot_save_path) &&
++                !fs_create_directory_with_parents(params.slot_save_path + DIRECTORY_SEPARATOR)) {
+                 throw std::invalid_argument("not a directory: " + value);
+             }
+             // if doesn't end with DIRECTORY_SEPARATOR, add it

@@ -5,17 +5,28 @@
 set -eu
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-cd "${ROOT}/vendor/llamafile/llama.cpp"
 
-for p in "${ROOT}"/patches/*.patch; do
-    name="$(basename "$p")"
-    if git apply --check "$p" 2>/dev/null; then
-        git apply "$p"
+# NNNN-*.patch apply to the nested llama.cpp tree; lf-*.patch apply to the
+# llamafile repo itself (vendor/llamafile)
+apply() {
+    name="$(basename "$1")"
+    if git apply --check "$1" 2>/dev/null; then
+        git apply "$1"
         echo "applied: $name"
-    elif git apply --reverse --check "$p" 2>/dev/null; then
+    elif git apply --reverse --check "$1" 2>/dev/null; then
         echo "already applied: $name"
     else
-        echo "error: $name does not apply — vendored llama.cpp changed?" >&2
+        echo "error: $name does not apply — vendored tree changed?" >&2
         exit 1
     fi
+}
+
+cd "${ROOT}/vendor/llamafile"
+for p in "${ROOT}"/patches/lf-*.patch; do
+    [ -e "$p" ] && apply "$p"
+done
+
+cd "${ROOT}/vendor/llamafile/llama.cpp"
+for p in "${ROOT}"/patches/[0-9]*.patch; do
+    [ -e "$p" ] && apply "$p"
 done

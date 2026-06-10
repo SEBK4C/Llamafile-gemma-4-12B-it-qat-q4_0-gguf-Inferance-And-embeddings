@@ -1,0 +1,29 @@
+Subject: llama_file: route write_raw through llamafile_write under COSMOCC
+
+The COSMOCC llama_file constructor only sets lfile, never fp, so
+write_raw's fwrite(fp) wrote through an uninitialized stream. Saving
+server slot KV state (--slot-save-path) crashed or wrote nothing.
+
+--- a/src/llama-mmap.cpp
++++ b/src/llama-mmap.cpp
+@@ -389,12 +389,20 @@
+     void write_raw(const void * ptr, size_t len) const {
+         if (len == 0) {
+             return;
++        }
++#ifdef COSMOCC
++        // fp is unset in the COSMOCC constructor; write through lfile
++        long rc = llamafile_write(lfile, ptr, len);
++        if (rc < 0 || (size_t) rc != len) {
++            throw std::runtime_error(format("write error: %s", strerror(errno)));
+         }
++#else
+         errno = 0;
+         size_t ret = std::fwrite(ptr, len, 1, fp);
+         if (ret != 1) {
+             throw std::runtime_error(format("write error: %s", strerror(errno)));
+         }
++#endif
+     }
+ 
+     void write_u32(uint32_t val) const {

@@ -16,6 +16,8 @@ mean
 999
 --spec-type
 ngram-simple
+--slot-save-path
+.gemma4-kv
 --host
 127.0.0.1
 --port

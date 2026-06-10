@@ -1,0 +1,29 @@
+Subject: server: allow checkpoint-less partial reuse when SWA evicted nothing
+
+For SWA models the server only allowed partial prompt reuse through a
+context checkpoint, and forced full re-processing otherwise. But when
+seq_pos_min == 0 the SWA cache still holds every position of the
+sequence (nothing was evicted yet), so rolling back to any prefix is
+sound without a checkpoint — the checkpoint matcher itself already
+makes this exact exception (cur.pos_min == 0). This makes slot states
+restored from --slot-save-path files actually reusable: without it, a
+restored prompt shorter than the SWA window always hit the
+"forcing full prompt re-processing" path because checkpoints are not
+serialized into state files.
+
+--- a/tools/server/server-context.cpp
++++ b/tools/server/server-context.cpp
+@@ -2768,7 +2768,12 @@
+                                     SLT_WRN(slot, "%s\n", st1.str().c_str());
+                                 }
+ 
+-                                if (pos_min >= pos_min_thold) {
++                                // pos_min == 0 means the SWA cache still holds every position of
++                                // this sequence (nothing was evicted), so partial reuse is sound
++                                // without a checkpoint — same exception the checkpoint matcher
++                                // makes below. This makes restored slot states (--slot-save-path)
++                                // reusable for prompts shorter than the SWA window.
++                                if (pos_min > 0 && pos_min >= pos_min_thold) {
+                                     // search for a context checkpoint
+                                     const auto it = std::find_if(
+                                         slot.prompt.checkpoints.rbegin(),

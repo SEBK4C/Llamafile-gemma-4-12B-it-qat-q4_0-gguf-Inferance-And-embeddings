@@ -47,6 +47,22 @@ class Gemma4Client:
         with urllib.request.urlopen(self.base_url + "/health", timeout=10) as resp:
             return json.loads(resp.read())
 
+    # On-disk KV cache (server must run with --slot-save-path, which our
+    # serve script and packaged llamafile do by default). Saved state lives
+    # in the hidden cache dir and survives server restarts.
+
+    def save_slot(self, filename, slot=0):
+        """Persist a slot's KV cache (processed prompt state) to disk."""
+        return self._post(f"/slots/{slot}?action=save", {"filename": filename})
+
+    def restore_slot(self, filename, slot=0):
+        """Load a previously saved KV cache into a slot."""
+        return self._post(f"/slots/{slot}?action=restore", {"filename": filename})
+
+    def erase_slot(self, slot=0):
+        """Clear a slot's KV cache."""
+        return self._post(f"/slots/{slot}?action=erase", {})
+
 
 def cosine(a, b):
     dot = sum(x * y for x, y in zip(a, b))

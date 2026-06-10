@@ -39,8 +39,13 @@ VISION_ARGS=""
 SPEC_ARGS="--spec-type ${GEMMA4_SPEC:-ngram-simple}"
 [ -n "${GEMMA4_DRAFT:-}" ] && SPEC_ARGS="--spec-type draft-simple -md ${GEMMA4_DRAFT}"
 
+# Hidden on-disk KV store: POST /slots/{id}?action=save|restore persists a
+# slot's KV cache here, surviving restarts (GEMMA4_KV_DIR overrides).
+KV_DIR="${GEMMA4_KV_DIR:-${ROOT}/.kvcache}"
+
 exec "$BIN" --server \
     $SPEC_ARGS \
+    --slot-save-path "$KV_DIR" \
     -m "$MODEL" \
     $VISION_ARGS \
     --embeddings \

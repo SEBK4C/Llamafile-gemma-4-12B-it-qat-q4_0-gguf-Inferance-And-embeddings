@@ -155,6 +155,49 @@ Not packaged into the single-file build: it would grow the file to ~11 GB,
 and on 16 GB machines both models can't share the Metal budget (the drafter
 would fall to CPU and draft slower than the target generates).
 
+## KV cache persistence (hidden dir next to the llamafile)
+
+The server's in-RAM prompt cache dies with the process. We additionally
+enable **on-disk KV state**: `scripts/serve.sh` runs with
+`--slot-save-path .kvcache/` (repo root), and the packaged llamafile uses a
+hidden `.gemma4-kv/` directory created next to wherever you launch it. A
+slot's processed-prompt state (tokens + KV cache) can be saved, then
+restored after a full server restart:
+
+```sh
+# after sending a request whose long prefix you want to keep (slot 0 or 1):
+curl -X POST 'http://127.0.0.1:8080/slots/1?action=save' \
+  -H 'Content-Type: application/json' -d '{"filename":"my-system-prompt.bin"}'
+
+# ... restart the server, then:
+curl -X POST 'http://127.0.0.1:8080/slots/1?action=restore' \
+  -H 'Content-Type: application/json' -d '{"filename":"my-system-prompt.bin"}'
+```
+
+The Python client wraps these as `save_slot` / `restore_slot` / `erase_slot`.
+Measured effect: an 870-token system prompt that took 6.2 s to process cold
+is reused from the restored state with `prompt_n=1` in 0.14 s (~45× faster
+time-to-first-token; the state file was 325 MB, restore took 91 ms).
+State files scale with cached tokens (~0.3 MB/token at ctx 8192 defaults).
+
+Making this work surfaced three more upstream/overlay bugs, fixed in
+`patches/` (applied by `make setup`):
+
+- `lf-0001`: the 0.10.x overlay routes every `llama_file` open through
+  `llamafile_open_gguf`, which magic-checked all files — `"wb"` saves
+  failed after creating an empty file, and restores of non-GGUF state
+  files fell into the `.zip` branch and failed.
+- `0003`: the COSMOCC `llama_file::write_raw` wrote through an
+  uninitialized `FILE*` instead of the overlay's file handle.
+- `0004`: for sliding-window models the server refused checkpoint-less
+  partial reuse even when `seq_pos_min == 0` proves nothing was evicted —
+  so restored states were always fully re-processed. (Checkpoints aren't
+  serialized into state files, so this gate made restore useless for SWA
+  models like Gemma 4.) Verified token-for-token identical greedy output
+  with and without reuse, plus a regression check in the smoke test.
+- `0002`: `--slot-save-path` now auto-creates the directory, so it can be
+  baked into the packaged llamafile's defaults.
+
 ## Publishing the packaged llamafile
 
 `dist/gemma4-server.llamafile` (6.5 GB) is too big for GitHub (100 MB file

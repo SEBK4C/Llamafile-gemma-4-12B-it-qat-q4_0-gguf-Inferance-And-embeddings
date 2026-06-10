@@ -89,6 +89,29 @@ def main():
     assert len(results) == 5
     print(f"       5/5 requests OK ({time.time()-t:.1f}s)")
 
+    print("[5/5] KV cache persistence (save -> erase -> restore -> reuse) ...",
+          flush=True)
+    kv_msgs = [{"role": "system", "content": "You are a pirate. " * 40},
+               {"role": "user", "content": "Say ahoy."}]
+    c.erase_slot(0), c.erase_slot(1)  # so only the pirate state exists below
+    first = c._post("/v1/chat/completions",
+                    {"messages": kv_msgs, "temperature": 0, "max_tokens": 64})
+    # the request may land on either slot; save whichever holds tokens
+    for slot in (0, 1):
+        if c.save_slot("smoke-kv.bin", slot=slot)["n_saved"] > 0:
+            break
+    else:
+        raise AssertionError("no slot held KV state after the request")
+    c.erase_slot(0), c.erase_slot(1)
+    c.restore_slot("smoke-kv.bin", slot=slot)
+    again = c._post("/v1/chat/completions",
+                    {"messages": kv_msgs, "temperature": 0, "max_tokens": 64})
+    t = again["timings"]
+    print(f"       restored to slot {slot}: cache_n={t['cache_n']}, prompt_n={t['prompt_n']}")
+    assert t["cache_n"] >= 100, f"restored KV state barely reused: cache_n={t['cache_n']}"
+    assert again["choices"][0]["message"] == first["choices"][0]["message"], \
+        "answer differs after KV restore"
+
     print("\nPASS — one instance served inference and embeddings.")
 
 
