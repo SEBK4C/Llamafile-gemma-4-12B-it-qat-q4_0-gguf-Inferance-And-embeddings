@@ -173,11 +173,17 @@ server via the mtmd API, so clients just send standard OpenAI content parts:
 {"type": "input_audio", "input_audio": {"data": "<base64>", "format": "wav"}}
 ```
 
-Verified on this machine: exact color/position grounding on synthetic
-images, and word-perfect transcription of spoken audio (`say`-generated,
-16 kHz mono WAV). ~19-28 s per image/audio turn on the M4 (the projector
-runs on CPU — `--no-mmproj-offload` — because this ggml vintage's Metal
-conv kernels assert on the projector's op shapes; the 12B stays on Metal).
+Verified on this machine: coarse visual grounding (color/position) and
+word-perfect transcription of spoken audio (`say`-generated, 16 kHz mono
+WAV). ~19-28 s per image/audio turn on the M4 (the projector runs on CPU —
+`--no-mmproj-offload` — because this ggml vintage's Metal conv kernels
+assert on the projector's op shapes; the 12B stays on Metal).
+
+> **Known bug (2026-06-11)**: fine-grained image perception is scrambled —
+> multi-line text in images reads as edge slivers (coarse layout survives;
+> audio is unaffected). Suspected gemma4uv positional-embedding geometry
+> (clean transpose ruled out empirically). Tracked on the
+> `mm-embedding-dev` branch; see docs/mm-embedding.md for details.
 
 Support required backporting upstream commit `a731805ced` (the `gemma4uv`
 / `gemma4ua` unified projector types postdate our llama.cpp pin) — carried

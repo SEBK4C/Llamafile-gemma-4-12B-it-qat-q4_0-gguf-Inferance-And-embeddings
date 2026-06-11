@@ -82,6 +82,31 @@ voice timbre/prosody) rather than topic.
   backend (chat with media and text embeddings are fine). Use
   `GEMMA4_NGL=0 make serve` for cross-modal embedding work until fixed.
 
+## ⚠️ Post-publication correction (2026-06-11): image perception is broken
+
+The mm-embedding-dev branch discovered, and we confirmed **on main**, that
+the gemma4uv vision path scrambles fine-grained geometry: multi-line text
+is perceived as left-edge slivers / hallucinated fragments, on CPU and
+Metal alike, at any font size. Our original legibility check was
+**confounded**: the fox sentence is the world's most famous pangram, and
+the model completed it from priors — non-memorizable sentences (pasta,
+money) fail OCR at temperature 0 (e.g. the money image loops on the
+sliver "er. (US)"). Coarse layout (left/right color split) survives.
+
+Consequences for this document: the **image-side numbers above entangle
+perceptual scrambling with the modality gap** and should be treated as a
+lower bound on image-embedding quality; audio is unaffected (transcription
+is word-perfect), which likely explains audio beating image on cross-modal
+similarity. The text and audio columns stand.
+
+Status: suspect area is the gemma4uv positional-embedding handling
+(`tools/mtmd/clip.cpp` pos_x/pos_y + the x/y table split in
+`models/gemma4uv.cpp`, from backport patch 0005 — plausibly upstream too).
+A clean transpose (x/y swap) is **ruled out**: transposed images are not
+readable either. Next step is comparing against the transformers
+`Gemma4UnifiedVisionEmbedder` reference — owned by the `mm-embedding-dev`
+branch; re-run this experiment after the fix.
+
 ## Dev notes — open questions for later
 
 1. **Learned alignment instead of mean offset.** The natural next step:
