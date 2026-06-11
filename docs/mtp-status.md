@@ -154,7 +154,16 @@ ngram gives ~0) — and now also the best Metal config (1.52× at n=2).
    the packaged artifact on 16 GB machines (caps packaged embedding
    inputs at 1024 tokens; serve.sh/CPU paths keep GEMMA4_UBATCH=2048).
    The OOM was invisible because of trap 3 — fixed in 0.10.5 (below).
-8. **Fixed in fork 0.10.5**: the dylib-logger blackout (trap 3) is now
+8. **Backported (fork 669ed81)**: upstream #24267 + #24277 (merged
+   upstream 2026-06-07) — shared-cells sizing fix and removal of the
+   per-decode kv-cells copy in the Gemma4 MTP sharing path. Effects here:
+   `--fit` now works WITH `-md` (the "--fit off is mandatory" trap is
+   retired; we keep it in baked args only for deterministic startup);
+   throughput unchanged on M4 even at 32k ctx (the host-side copy hides
+   behind Metal decode latency — upstream's +20-43% was RTX 5090 at 64k);
+   fingerprints and full smoke unchanged. Carried as three patch files
+   (src_llama-kv-cache.cpp/.h, src_llama-kv-cells.h).
+9. **Fixed in fork 0.10.5**: the dylib-logger blackout (trap 3) is now
    mitigated — `llamafile_log_callback_errors` forwards GGML **error**
    level messages from the Metal dylib to stderr even in non-verbose
    mode (llamafile/main.cpp + chatbot_main.cpp), so command-buffer

@@ -119,6 +119,10 @@ leaves ~311 ms per verify round where a single baseline decode step costs
   list, while "offloaded 49/49 layers" still prints.
 - The `--fit` probe cannot construct the MTP context (needs ctx_other);
   it degrades placement. Always pass `--fit off` with `-md`.
+  UPDATE 2026-06-11: fixed by backporting upstream #24267 (fork 669ed81) —
+  fit now coexists with `-md` (19.9 tok/s, exact fingerprint). `--fit off`
+  is still baked into our configs for deterministic startup but is no
+  longer mandatory.
 - Metal: `-ngl 999` or `-ngl 0`, never partial; `--no-mmproj-offload`
   always; media embeddings only in CPU runs.
 - `/health` returns 503 (curl exit 0!) while loading — wait for `"ok"`.
