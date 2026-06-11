@@ -23,6 +23,34 @@
 > Note `xcrun metal` absence also means offline metallib can't be built
 > or shipped from this machine. The +30% estimate stands.
 
+> **SESSION 2 PLAN (Xcode kernel patching — Sebastian is installing full
+> Xcode).** With Xcode in place, the blockers fall: `xcrun metal` exists
+> and, more importantly, Metal GPU captures / Instruments profiling work.
+> Order of attack:
+> 1. `sudo xcode-select -s /Applications/Xcode.app` + accept license;
+>    verify `xcrun -sdk macosx metal --version`.
+> 2. Profile ONE slow case first — a b=4 decode (mv path) and a b=13
+>    decode (mm path) — via Instruments "Metal System Trace" or
+>    programmatic capture (`MTLCaptureManager`, triggerable from the
+>    dylib with a small patch; remember the manual-dylib-build loop
+>    below, ~30 s/iteration). Get per-kernel GPU times: how much of the
+>    420 ms mm cost is the matmul kernels vs everything else; whether mv's
+>    28 ms/token is bandwidth (expected re-reads) or occupancy.
+> 3. Only then patch kernels: candidates are (a) a fused multi-column mv
+>    (stream weights once, b accumulators — what ext should have been;
+>    check why ext loses: occupancy? nxpsg layout? dequant duplication?),
+>    (b) mm tile/simdgroup params for small N, (c) re-tune dispatch
+>    thresholds per measured tables.
+> 4. Verification gates and tooling are unchanged (probe script, n-sweep,
+>    parity, smoke; bench against baseline 13.3 and n=2 20.1).
+> Upstream watch (2026-06-11 recon): #24267+#24277 (shared-cells fixes)
+> are ALREADY BACKPORTED (fork 669ed81; --fit works with -md now);
+> #24086 D2D-copy removal is Qwen-gated-delta-net only (not our path);
+> #24282 added Gemma-4 E2B/E4B assistants (small-Mac drafter option);
+> #24480 (open) fixes Gemma4 MTP llama-server on Windows; DFlash
+> block-drafting is in vLLM + draft llama.cpp PR #22105 — re-check all
+> before starting kernel work in case upstream moved.
+
 ## Mission
 
 After disabling ggml-metal's `mul_mv_ext` kernels, draft-mtp n=2 reaches
