@@ -118,11 +118,11 @@ bin/llamafile --server \
 
 ## Open items beyond this branch
 
-- 4 commits inside `vendor/llamafile` (`1a50723..05cfc57`: pin bump,
-  cuda/vulkan patch regen, ngram-mod overlay-patch drop, mtmd `bool
-  placeholder` API fix in chatbot_*.cpp) exist ONLY locally — must be
-  pushed to a llamafile fork before the recorded submodule SHA is
-  fetchable by anyone else.
+- ~~Submodule commits only local~~ RESOLVED 2026-06-11: the 5 vendor
+  commits (`1a50723..8f03833`) are pushed to
+  https://github.com/SEBK4C/llamafile branch `mtp-gemma4-drafter`, and
+  `.gitmodules` now points at that fork (commit `e35f821`). The nested
+  llama.cpp gitlink (04eb4c44) is upstream ggml-org — fetchable as-is.
 - Pooled-embeddings bug (patch 0001) still unfixed upstream at 04eb4c446d
   (`GGML_UNUSED(embd_all)` in both kv-cache files).
 - 12B drafter untested upstream (author: 31B/26B-A4B only). E4B/E2B fail
