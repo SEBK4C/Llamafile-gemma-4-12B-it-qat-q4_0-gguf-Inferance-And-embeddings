@@ -1,0 +1,196 @@
+Subject: server: automatic slot KV persistence + read-only-dir resilience
+
+With --slot-save-path set, restore autosave-slot-<id>.bin into each slot at startup and rewrite them on graceful shutdown (SIGINT/SIGTERM), so prompt KV survives restarts without /slots API calls. --no-slot-autosave opts out. Failures (missing/stale/corrupt file, unwritable dir) warn and degrade to a cold start.
+An unwritable --slot-save-path (e.g. baked-in relative path with a read-only CWD) previously aborted startup during arg parsing; it now falls back to ~/.cache/llamafile/kv, then to disabled, never fatal.
+Known gaps: slots already migrated to the in-RAM prompt cache (cache_idle_slots) have no tokens to autosave; media slot states still cannot serialize; the MTP drafter context is not restored (first verify rounds after restart draft at reduced acceptance until re-warmed).
+
+
+diff --git a/common/arg.cpp b/common/arg.cpp
+--- a/common/arg.cpp
++++ b/common/arg.cpp
+@@ -3098,7 +3098,29 @@
+             // only creates components terminated by a separator
+             if (!fs_is_directory(params.slot_save_path) &&
+                 !fs_create_directory_with_parents(params.slot_save_path + DIRECTORY_SEPARATOR)) {
+-                throw std::invalid_argument("not a directory: " + value);
++                // unwritable (e.g. read-only CWD with a baked-in relative path):
++                // fall back to a per-user cache dir, then to disabled — never fatal
++                const char * home = getenv("HOME");
++#ifdef _WIN32
++                if (home == nullptr) home = getenv("USERPROFILE");
++#endif
++                std::string fallback;
++                if (home != nullptr && home[0] != '\0') {
++                    fallback = std::string(home) + DIRECTORY_SEPARATOR + ".cache" +
++                               DIRECTORY_SEPARATOR + "llamafile" + DIRECTORY_SEPARATOR + "kv";
++                }
++                if (!fallback.empty() &&
++                    (fs_is_directory(fallback) ||
++                     fs_create_directory_with_parents(fallback + DIRECTORY_SEPARATOR))) {
++                    fprintf(stderr, "warning: --slot-save-path: cannot create '%s' (read-only?), using '%s' instead\n",
++                            value.c_str(), fallback.c_str());
++                    params.slot_save_path = fallback;
++                } else {
++                    fprintf(stderr, "warning: --slot-save-path: cannot create '%s' (read-only?), slot KV persistence disabled\n",
++                            value.c_str());
++                    params.slot_save_path.clear();
++                    return;
++                }
+             }
+             // if doesn't end with DIRECTORY_SEPARATOR, add it
+             if (!params.slot_save_path.empty() && params.slot_save_path[params.slot_save_path.size() - 1] != DIRECTORY_SEPARATOR) {
+@@ -3107,6 +3129,14 @@
+         }
+     ).set_examples({LLAMA_EXAMPLE_SERVER}));
+     add_opt(common_arg(
++        {"--slot-autosave"},
++        {"--no-slot-autosave"},
++        string_format("with --slot-save-path: restore slot KV at startup and save it at graceful shutdown (default: %s)", params.slot_autosave ? "enabled" : "disabled"),
++        [](common_params & params, bool value) {
++            params.slot_autosave = value;
++        }
++    ).set_examples({LLAMA_EXAMPLE_SERVER}).set_env("LLAMA_ARG_SLOT_AUTOSAVE"));
++    add_opt(common_arg(
+         {"--media-path"}, "PATH",
+         "directory for loading local media files; files can be accessed via file:// URLs using relative paths (default: disabled)",
+         [](common_params & params, const std::string & value) {
+diff --git a/common/common.h b/common/common.h
+--- a/common/common.h
++++ b/common/common.h
+@@ -648,6 +648,7 @@
+     bool log_json = false;
+ 
+     std::string slot_save_path;
++    bool slot_autosave = true; // with slot_save_path set: restore slot KV at startup, save at graceful shutdown
+     std::string media_path; // path to directory for loading media files
+ 
+     float slot_prompt_similarity = 0.1f;
+diff --git a/tools/server/server-context.cpp b/tools/server/server-context.cpp
+--- a/tools/server/server-context.cpp
++++ b/tools/server/server-context.cpp
+@@ -748,6 +748,60 @@
+         slot.prompt_save(*prompt_cache);
+         slot.prompt_clear(false);
+         prompt_cache->update();
++    }
++
++    // automatic slot KV persistence: with --slot-save-path set, the server
++    // restores autosave-slot-<id>.bin at startup and rewrites it on graceful
++    // shutdown, so prompt KV survives restarts without /slots API calls.
++    // Failures only warn: a missing/corrupt/incompatible file or an
++    // unwritable directory degrades to a cold start, never an abort.
++    std::string slot_autosave_filepath(const server_slot & slot) const {
++        return params_base.slot_save_path + "autosave-slot-" + std::to_string(slot.id) + ".bin";
++    }
++
++    void slots_autosave() {
++        for (auto & slot : slots) {
++            if (slot.prompt.n_tokens() == 0) {
++                continue;
++            }
++            if (slot.prompt.tokens.has_media()) {
++                SLT_WRN(slot, "%s", "autosave skipped: media slot states cannot be serialized\n");
++                continue;
++            }
++            const std::string filepath = slot_autosave_filepath(slot);
++            const llama_tokens & tokens = slot.prompt.tokens.get_tokens();
++            const size_t nwrite = llama_state_seq_save_file(ctx_tgt, filepath.c_str(), slot.id, tokens.data(), tokens.size());
++            if (nwrite == 0) {
++                SLT_WRN(slot, "autosave failed for %s (directory unwritable?)\n", filepath.c_str());
++            } else {
++                SLT_INF(slot, "autosaved %zu tokens (%.1f MiB) to %s\n",
++                        tokens.size(), nwrite / (1024.0 * 1024.0), filepath.c_str());
++            }
++        }
++    }
++
++    void slots_autorestore() {
++        for (auto & slot : slots) {
++            const std::string filepath = slot_autosave_filepath(slot);
++            FILE * f = std::fopen(filepath.c_str(), "rb");
++            if (f == nullptr) {
++                continue;
++            }
++            std::fclose(f);
++            llama_tokens tokens;
++            tokens.resize(slot.n_ctx);
++            size_t token_count = 0;
++            const size_t nread = llama_state_seq_load_file(ctx_tgt, filepath.c_str(), slot.id, tokens.data(), tokens.size(), &token_count);
++            if (nread == 0) {
++                slot.prompt.tokens.clear();
++                SLT_WRN(slot, "autorestore failed for %s (stale or incompatible state file, starting cold)\n", filepath.c_str());
++                continue;
++            }
++            tokens.resize(token_count);
++            slot.prompt.tokens.clear();
++            slot.prompt.tokens.insert(tokens);
++            SLT_INF(slot, "autorestored %zu tokens from %s\n", token_count, filepath.c_str());
++        }
+     }
+ 
+     void handle_sleeping_state(bool new_state) {
+@@ -3592,8 +3646,22 @@
+ 
+ void server_context::terminate() {
+     impl->queue_tasks.terminate();
++}
++
++void server_context::slots_autorestore() {
++    if (impl->params_base.slot_save_path.empty() || !impl->params_base.slot_autosave) {
++        return;
++    }
++    impl->slots_autorestore();
+ }
+ 
++void server_context::slots_autosave() {
++    if (impl->params_base.slot_save_path.empty() || !impl->params_base.slot_autosave) {
++        return;
++    }
++    impl->slots_autosave();
++}
++
+ llama_context * server_context::get_llama_context() const {
+     return impl->ctx_tgt;
+ }
+diff --git a/tools/server/server-context.h b/tools/server/server-context.h
+--- a/tools/server/server-context.h
++++ b/tools/server/server-context.h
+@@ -82,6 +82,13 @@
+     // register a callback to be called when sleeping state changes
+     // must be set before load_model() is called
+     void on_sleeping_changed(std::function<void(bool)> callback);
++
++    // automatic slot KV persistence (active when --slot-save-path is set and
++    // --no-slot-autosave is not): restore per-slot autosave files after
++    // load_model(), write them after start_loop() returns. Both are no-ops
++    // when slot_save_path is empty; failures warn and never abort.
++    void slots_autorestore();
++    void slots_autosave();
+ };
+ 
+ 
+diff --git a/tools/server/server.cpp b/tools/server/server.cpp
+--- a/tools/server/server.cpp
++++ b/tools/server/server.cpp
+@@ -325,6 +325,10 @@
+             SRV_ERR("%s", "exiting due to model loading error\n");
+             return 1;
+         }
++
++        // restore autosaved slot KV before serving (no-op unless
++        // --slot-save-path is set and autosave is enabled)
++        ctx_server.slots_autorestore();
+ 
+         routes.update_meta(ctx_server);
+         ctx_http.is_ready.store(true);
+@@ -387,6 +391,10 @@
+         // this call blocks the main thread until queue_tasks.terminate() is called
+         ctx_server.start_loop();
+ 
++        // persist slot KV for the next launch (graceful shutdowns only —
++        // SIGKILL skips this; no-op unless --slot-save-path is set)
++        ctx_server.slots_autosave();
++
+         clean_up();
+         if (ctx_http.thread.joinable()) {
+             ctx_http.thread.join();

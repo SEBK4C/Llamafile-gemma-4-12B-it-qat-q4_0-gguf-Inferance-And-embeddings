@@ -323,14 +323,30 @@ now refuses such requests with HTTP 501 instead of crashing (patch 0009).
 Run `GEMMA4_NGL=0 make serve` to embed images/audio on the CPU backend;
 root-cause notes live in docs/mm-embedding.md.
 
-## KV cache persistence (hidden dir next to the llamafile)
+## KV cache persistence (automatic — survives restarts)
 
 The server's in-RAM prompt cache dies with the process. We additionally
 enable **on-disk KV state**: `scripts/serve.sh` runs with
 `--slot-save-path .kvcache/` (repo root), and the packaged llamafile uses a
-hidden `.gemma4-kv/` directory created next to wherever you launch it. A
-slot's processed-prompt state (tokens + KV cache) can be saved, then
-restored after a full server restart:
+hidden `.gemma4-kv/` directory created next to wherever you launch it.
+
+**Since 0.10.7 this is automatic** (patch `0011`): on graceful shutdown
+(SIGINT/SIGTERM, not SIGKILL) every text-only slot with cached tokens is
+written to `autosave-slot-<id>.bin`, and on the next launch those files are
+restored before the server starts answering — a prompt matching the cached
+prefix skips straight to generation, no API calls involved.
+`--no-slot-autosave` opts out. If the launch directory is read-only the
+server no longer refuses to start: it warns and falls back to
+`~/.cache/llamafile/kv/`, disabling persistence only if that also fails.
+Two limitations: a slot whose prompt was already migrated to the in-RAM
+cache (happens when a *new* request arrives while it sits idle) has nothing
+left to autosave, and the MTP drafter state is not restored, so the first
+verify rounds after a restart draft at reduced acceptance (speed-only,
+self-heals).
+
+Manual save/restore still works for named checkpoints — a slot's
+processed-prompt state (tokens + KV cache) can be saved, then restored
+after a full server restart:
 
 ```sh
 # after sending a request whose long prefix you want to keep (slot 0 or 1):
