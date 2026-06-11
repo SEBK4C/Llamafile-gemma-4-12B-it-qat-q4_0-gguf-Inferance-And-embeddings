@@ -6,6 +6,23 @@
 > `docs/mtp-status.md` ("Metal MTP slowdown: root cause & fix" + traps),
 > `docs/mtp-metal-kickoff.md` (the previous, resolved mission).
 
+> **PROGRESS 2026-06-11 (same day, later session):** H-compile is REFUTED
+> and H-dispatch is partially done. Stock upstream llama.cpp built at our
+> exact pin on the same M4 shows the SAME slow numbers (instrument-matched
+> server probe: b=2/4/8/10 → 108/194/381/468 ms, ext kernels active), and
+> brew's prebuilt (offline-metallib, ggml master d2462f8f7 with
+> byte-identical kernels and dispatch) benches identically — so neither
+> llamafile's runtime shader compile nor a missing upstream fix is the
+> cause. Our fork is now uniformly ≥ stock at every width. Shipped in
+> 0.10.5: `ne11_mm_min` 8 → 12 (mv covers b≤12: 259-337 ms vs mm's
+> 453-468 ms) and dylib error-log forwarding. What remains of this mission
+> is REAL KERNEL WORK (H-kernel): the mv slope (~28 ms/extra token) and
+> the mm base cost (~360-420 ms flat) — likely needs a fused
+> multi-column mv kernel done right for M4, and profiling requires full
+> Xcode (no `xcrun metal` on CLT-only machines; GPU captures unavailable).
+> Note `xcrun metal` absence also means offline metallib can't be built
+> or shipped from this machine. The +30% estimate stands.
+
 ## Mission
 
 After disabling ggml-metal's `mul_mv_ext` kernels, draft-mtp n=2 reaches

@@ -143,14 +143,25 @@ ngram gives ~0) — and now also the best Metal config (1.52× at n=2).
    cross-batch carryover (speculative.cpp `common_speculative_impl_draft_mtp`)
    not being invalidated on restore. Small, unfixed; investigate if
    restored-slot throughput matters.
-7. **`-ub 2048` is broken on Metal** (found 2026-06-11 while packaging):
-   any decode fails with `graph_compute ... error -1`, regardless of spec
-   type, MTP, ext kernels, or other instances running — pre-existing, NOT
-   from the d4c192d fix (verified via GGML_METAL_MV_EXT=1). Ceiling is
-   between 1024 (works) and 1536 (fails). The packaged artifact now bakes
-   `-ub 1024` (caps packaged embedding inputs at 1024 tokens; serve.sh/CPU
-   paths keep GEMMA4_UBATCH=2048). The pre-fix package was only ever
-   validated at `-ngl 0`, which is why this never surfaced.
+7. **`-ub 2048` fails on Metal in the full packaged config** (found
+   2026-06-11; ROOT-CAUSED later same day): the Metal command buffer dies
+   with `kIOGPUCommandBufferCallbackErrorOutOfMemory` — a GPU
+   working-set OOM on the M4's ~12 GB Metal budget, NOT a kernel bug.
+   It needs the full component set to trigger (12B weights + MTP drafter
+   ctx + embeddings + mmproj + 2 slots + the ub-2048 compute buffers);
+   each flag individually is fine, and a minimal stock llama.cpp server
+   at ub 2048 also works. `-ub 1024` fits and is the right default for
+   the packaged artifact on 16 GB machines (caps packaged embedding
+   inputs at 1024 tokens; serve.sh/CPU paths keep GEMMA4_UBATCH=2048).
+   The OOM was invisible because of trap 3 — fixed in 0.10.5 (below).
+8. **Fixed in fork 0.10.5**: the dylib-logger blackout (trap 3) is now
+   mitigated — `llamafile_log_callback_errors` forwards GGML **error**
+   level messages from the Metal dylib to stderr even in non-verbose
+   mode (llamafile/main.cpp + chatbot_main.cpp), so command-buffer
+   failures print their cause. Also in 0.10.5: `ne11_mm_min` 8 → 12
+   (mv beats mm through b=12: 259-337 ms vs 453-468 ms), and the version
+   bump itself re-keys `~/.llamafile/v/` so published-artifact users get
+   the new Metal dylib automatically (no more `rm -rf` caveat).
 
 ## The working invocation (local paths skip sibling auto-discovery — `-md` is mandatory)
 
