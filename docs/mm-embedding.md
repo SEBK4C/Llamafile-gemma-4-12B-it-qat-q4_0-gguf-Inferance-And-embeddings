@@ -222,6 +222,53 @@ Consequences:
   item for image embeddings — likely worth an upstream issue with the
   sliver-fragment evidence above.
 
+## Image pipeline: resolution research + final verdict (2026-06-11, session 2)
+
+Patch 0010 (port of chippydip's gemma4uv-vision-fix, = upstream issue
+#24146) fixed the real runtime divergence: the resize now always fills
+the soft-token budget like the HF reference (224² → 768² @ the default
+280-token cap), bicubic, with F32 projector accumulation. After that, a
+literature + ecosystem sweep and controlled experiments give the final
+picture:
+
+- **Budget**: Google's own docs recommend **1120 image tokens for OCR /
+  small text** (budgets 70/140/280/560/1120); llama.cpp's 280 default is
+  the general-purpose tier (upstream PR #24014 raises it). Our build
+  honours `--image-max-tokens 1120` (224² source → 1584², 1089 tokens;
+  verified prompt_tokens=1120). Ollama hardcodes 280 (issue #15626).
+  Requires all image tokens in one ubatch — serve.sh's `-ub 2048` is OK.
+- **Field consensus** (DeepSeek-OCR, GOT-OCR2, Qwen2.5/3-VL, dots.ocr,
+  PaddleOCR-VL, Donut/Nougat): every OCR-capable VLM attends across
+  patches at 14–16px granularity BEFORE compressing to ~28–64px/token.
+  Gemma 4 12B *Unified* is encoder-free (raw 48px cells, linear
+  projection, the LM does all stitching) — architecturally the weakest
+  configuration in the field for text, matching the encoder-free track
+  record (Fuyu, EVE, SOLO, Mono-InternVL all lag on documents).
+- **Patch-boundary literature** (arXiv 2402.07384, PIXEL bigram
+  rendering): horizontal cuts through text lines hurt (glyph halves end
+  up a full patch-row apart in token space); patch-aligned rendering
+  measurably helps pixel LMs. Our contact-sheet visualization
+  (tests/viz_preprocess.py) showed exactly this on the 224px corpus.
+- **Controlled endpoint**: native 1584² render, 80px glyphs, 1120
+  tokens, lines patch-row-aligned → clean line structure but content
+  words still dropped/mangled ("pasta" lost, "guanciale and pecorino" →
+  "and people"); misaligned variant hallucinates. **Verdict: remaining
+  weakness is the architecture, not the runtime.** The 12B Unified
+  trades OCR fidelity for encoder-free simplicity; that is its ceiling.
+
+Practical recipe for document/PDF work on this stack:
+
+1. Serve with `--image-max-tokens 1120` for any OCR-ish chat use.
+2. Rasterize PDFs at 144–200 DPI (olmOCR uses 1288px longest edge;
+   MinerU 200 DPI; Nougat's 96 DPI is the cautionary tale), keep
+   x-height ≥ 10px at final model resolution.
+3. Prefer rendering text at the model input size (multiples of 48px,
+   e.g. 1584² at the 1120 budget) so the budget-fill resize is a no-op,
+   and align line pitch to the 48px patch grid.
+4. For OCR that must actually work, use a ViT-path model (Gemma 4
+   E4B/26B/31B = gemma4v, or Qwen2.5-VL-class e.g. olmOCR) — the 12B
+   Unified will not get there at any rendering setting.
+
 ## Metal media-embeddings crash (WS3, 2026-06-11)
 
 The crash from the 2026-06-10 caveat was debugged as far as the tooling
