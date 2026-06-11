@@ -15,10 +15,11 @@ set -eu
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 MODEL="${ROOT}/models/gemma-4-12b-it-qat-q4_0.gguf"
 MMPROJ="${ROOT}/models/mmproj-gemma-4-12b-it-qat-q4_0.gguf"
-# MTP drafter (optional, +449 MB): baked in when present. Opt in at runtime:
-#   ./gemma4-server.llamafile -ngl 0 --spec-type draft-mtp \
-#     -md /zip/mtp-gemma-4-12b-it-qat-q4_0.gguf --fit off
-# (+14% on CPU; slower than baseline on Metal — see docs/mtp-status.md)
+# MTP drafter (+449 MB): baked in and ENABLED BY DEFAULT via
+# package/gemma4.args (--spec-type draft-mtp, n_max 2, --fit off):
+# 1.52x baseline on Metal (needs the fork d4c192d Metal fix), +14% on CPU
+# — see docs/mtp-status.md. Opt out at runtime:
+#   ./gemma4-server.llamafile --spec-type ngram-simple
 DRAFTER="${ROOT}/models/mtp-gemma-4-12b-it-qat-q4_0.gguf"
 OUT="${ROOT}/dist/gemma4-server.llamafile"
 
@@ -37,8 +38,8 @@ trap 'rm -rf "$TMP"' EXIT
 cp "${ROOT}/package/gemma4.args" "${TMP}/.args"
 
 # -j0: store aligned + uncompressed so weights mmap directly from the zip
-EXTRA=""
-[ -f "$DRAFTER" ] && EXTRA="$DRAFTER"
+[ -f "$DRAFTER" ] || { echo "error: $DRAFTER missing — default args enable draft-mtp" >&2; exit 1; }
+EXTRA="$DRAFTER"
 "${ROOT}/bin/zipalign" -j0 "$OUT" "$MODEL" "$MMPROJ" $EXTRA "${TMP}/.args"
 chmod +x "$OUT"
 

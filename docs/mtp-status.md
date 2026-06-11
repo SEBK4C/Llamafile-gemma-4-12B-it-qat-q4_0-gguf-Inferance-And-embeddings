@@ -135,6 +135,22 @@ ngram gives ~0) — and now also the best Metal config (1.52× at n=2).
 5. **`--recompile` is rejected in `--server` mode** (parser error), even
    though `FLAG_recompile` is honored by BuildMetal. Use the
    delete-the-cache-dir workaround instead.
+6. **MTP acceptance can degrade after a slot KV restore** (observed
+   2026-06-11 on the packaged artifact: 23% acceptance / 12.7 tok/s on a
+   request served right after the smoke test's save→erase→restore cycle,
+   vs a reproducible 52% / 17.4-17.7 tok/s on a fresh server). Speed-only —
+   verification keeps outputs exact. Suspect: the drafter's per-seq
+   cross-batch carryover (speculative.cpp `common_speculative_impl_draft_mtp`)
+   not being invalidated on restore. Small, unfixed; investigate if
+   restored-slot throughput matters.
+7. **`-ub 2048` is broken on Metal** (found 2026-06-11 while packaging):
+   any decode fails with `graph_compute ... error -1`, regardless of spec
+   type, MTP, ext kernels, or other instances running — pre-existing, NOT
+   from the d4c192d fix (verified via GGML_METAL_MV_EXT=1). Ceiling is
+   between 1024 (works) and 1536 (fails). The packaged artifact now bakes
+   `-ub 1024` (caps packaged embedding inputs at 1024 tokens; serve.sh/CPU
+   paths keep GEMMA4_UBATCH=2048). The pre-fix package was only ever
+   validated at `-ngl 0`, which is why this never surfaced.
 
 ## The working invocation (local paths skip sibling auto-discovery — `-md` is mandatory)
 
