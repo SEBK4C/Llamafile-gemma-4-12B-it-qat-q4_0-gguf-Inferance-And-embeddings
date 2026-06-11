@@ -97,6 +97,36 @@ def make_assets(audio=True):
     print(f"{len(SENTENCES)} items written to {ASSETS}")
 
 
+def make_tight_assets(audio=False):
+    """1584-wide strips, height = text extent rounded to 48px patch rows.
+
+    No empty quadrants: at fixed token budgets the budget-fill resize then
+    spends ~all tokens on glyphs, and mean-pooled embeddings are not
+    diluted by hundreds of identical white-patch states (uniform patches
+    all collapse to the same vector under patch_ln1).
+    """
+    from PIL import Image, ImageDraw, ImageFont
+    import textwrap
+    dest = "/tmp/modality_tight"
+    os.makedirs(dest, exist_ok=True)
+    font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 80)
+    for i, words in enumerate(SENTENCES):
+        lines = textwrap.wrap(words, width=30)
+        h = ((48 + len(lines) * 96 + 47) // 48) * 48  # top pad + lines, 48-aligned
+        img = Image.new("RGB", (1584, h), "white")
+        d = ImageDraw.Draw(img)
+        y = 48
+        for line in lines:
+            d.text((48, y), line, fill="black", font=font)
+            y += 96
+        img.save(f"{dest}/{i:02d}.png")
+    if audio:
+        make_audio(dest)
+    with open(f"{dest}/manifest.json", "w") as f:
+        json.dump(SENTENCES, f, indent=1)
+    print(f"{len(SENTENCES)} tight items written to {dest}")
+
+
 def make_native_assets(audio=False):
     """1584x1584 = the exact gemma4uv input at the 1120-token OCR budget.
 
@@ -130,10 +160,14 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--native", action="store_true",
                     help="render the 1584px patch-aligned corpus instead")
+    ap.add_argument("--tight", action="store_true",
+                    help="render content-cropped 1584-wide strips instead")
     ap.add_argument("--audio", action="store_true",
                     help="also synthesize WAVs (say + afconvert)")
     args = ap.parse_args()
     if args.native:
         make_native_assets(audio=args.audio)
+    elif args.tight:
+        make_tight_assets(audio=args.audio)
     else:
         make_assets(audio=True)

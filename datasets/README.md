@@ -33,3 +33,16 @@ occupies exactly two whole patch rows (no horizontal glyph cuts).
 **Serve with `--image-max-tokens 1120`** when using these — at the
 default 280-token budget the runtime *downscales* them to 768², halving
 the pixels per glyph.
+
+## native-tight/ — content-cropped strips (no empty quadrants)
+
+Same rendering as native-1584 but the canvas height is the text extent
+(48-aligned): 1584×336/432 strips. Two purposes: (1) at the DEFAULT
+280-token budget these spend ~252–256 tokens almost entirely on glyphs
+(the square set wastes ~75% of its tokens on blank white patches);
+(2) mean-pooled image embeddings are not diluted by hundreds of
+identical white-patch states — every uniform patch collapses to the
+same vector under `patch_ln1`, so blank area systematically drags all
+image embeddings toward one direction (a suspected contributor to the
+high image block-similarity in the modality-gap numbers). Use at the
+default budget (no flag needed).
