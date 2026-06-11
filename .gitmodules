@@ -1,3 +1,4 @@
 [submodule "vendor/llamafile"]
 	path = vendor/llamafile
-	url = https://github.com/mozilla-ai/llamafile.git
+	url = https://github.com/SEBK4C/llamafile.git
+	branch = mtp-gemma4-drafter
