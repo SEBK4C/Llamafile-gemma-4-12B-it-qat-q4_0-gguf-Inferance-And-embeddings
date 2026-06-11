@@ -51,6 +51,54 @@
 > block-drafting is in vLLM + draft llama.cpp PR #22105 — re-check all
 > before starting kernel work in case upstream moved.
 
+> **PROGRESS 2026-06-11 (session 2, Xcode installed).** Toolchain live:
+> Metal compiler needed `xcodebuild -downloadComponent MetalToolchain`
+> (done) and works via `DEVELOPER_DIR=/Applications/Xcode.app` (global
+> `xcode-select -s` still pending, not required). Three deliverables:
+>
+> 1. **Per-op GPU profiler (new tool).** `GGML_METAL_PROFILE_COMPUTE=N`
+>    profiles the Nth graph compute: one cmd_buf per op, GPUStart/EndTime,
+>    aggregated table to stderr. Also `GGML_METAL_COUNT_COMPUTE=1` (numbers
+>    every compute for calibration) and `GGML_METAL_MM_MIN=k` (dispatch
+>    threshold override, no rebuild). All in the extracted 0.10.5 sources;
+>    diff saved at `llama.cpp.patches/session-metal-profiler/`. Rebuild
+>    loop is now `scripts/rebuild_metal_dylib.sh` (~3 s, parallel cc).
+>    Calibration on this server config: load+model warmup = computes #1-2,
+>    a `n_predict=4` warmup request = #3-7, first probe request = #8.
+>    Xcode gputraces also work (`GGML_METAL_CAPTURE_COMPUTE=8` +
+>    `MTL_CAPTURE_ENABLED=1`): /tmp/cap-b4.gputrace, /tmp/cap-b13.gputrace.
+> 2. **Hidden prefill split found — every probe number in the table below
+>    is contaminated.** The server splits every prompt of b≥5 into TWO full
+>    forward passes (b-4, then 4): upstream checkpoint logic
+>    (`server-context.cpp:3082`, `checkpoint_offsets[] = {4+n_ubatch, 4}`,
+>    PR #20288, for SWA-model rollback — Gemma4 is SWA). On M4 Metal the
+>    trailing-4 pass costs a full weight read (~130 ms). `--ctx-checkpoints
+>    0` removes it: b=13 392→263 ms, b=16 472→267, b=25 359→250. Safe with
+>    draft-mtp: spec rollback uses `slot.spec_ckpt`, created independently
+>    of `n_ctx_checkpoints` (verified in code, lines 2543/3485). Trade-off:
+>    no cheap mid-history reprocess on divergent prompts. Upstream idea:
+>    skip the split when the prompt is short. NOTE: decode-time spec verify
+>    batches do NOT go through this path — only prefills were affected.
+> 3. **Corrected single-graph curves (ckpt off, this M4):** mv: 90/104/131/
+>    160/188/216/245/274 ms at b=2..9 (slope 28.5 ms/col); mm: FLAT ~240-258
+>    for b=3..16 (not 360-460 — those were 2-graph sums; mm(49)=466).
+>    Crossover is b=8 ⇒ `ne11_mm_min` should be **7**, not 12 (b=9..12 drop
+>    274/308/338/360 → ~245). Per-op profile of b=1 decode (98 ms
+>    serialized): FFN mv kernels 60 ms, lm_head q6_K 262k-vocab single op
+>    9.9 ms (≈bandwidth-bound, fine), attn matmuls ~16 ms, FA 1.4 ms. At
+>    b=4 the same mv kernels are +31-38% — the slope is IN the kernels, not
+>    graph overhead. H-kernel mission unchanged: fused multi-col mv would
+>    put verify(b≤8) near ~100 ms; mm small-N at ~245 ms is still ~3.5
+>    weight passes. Upstream recon: no movement on these kernels/thresholds
+>    since our pin (which IS the Gemma4-MTP merge #23398); #24086 confirmed
+>    Qwen-gated-delta-net only (`ggml_gated_delta_net` signature change),
+>    no backport needed.
+>
+> Next: (a) end-to-end draft-mtp n-sweep with `--ctx-checkpoints 0` +
+> mm_min=7, re-check optimal n; (b) ship mm_min=7 + the env overrides into
+> the canonical patches; (c) H-kernel work with the profiler as the
+> measurement loop. Verification gates unchanged.
+
 ## Mission
 
 After disabling ggml-metal's `mul_mv_ext` kernels, draft-mtp n=2 reaches

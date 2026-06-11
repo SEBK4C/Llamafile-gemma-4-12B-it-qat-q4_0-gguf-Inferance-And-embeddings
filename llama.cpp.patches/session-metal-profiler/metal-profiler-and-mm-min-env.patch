@@ -1,0 +1,178 @@
+--- llama.cpp/ggml/src/ggml-metal/ggml-metal-context.m	2022-03-17 07:00:00
++++ /Users/sebastian/.llamafile/v/0.10.5/ggml-metal-context.m	2026-06-11 20:42:24
+@@ -435,12 +435,148 @@
+     }
+ }
+ 
++// per-op GPU profiler: GGML_METAL_PROFILE_COMPUTE=N profiles the Nth graph
++// compute by submitting one command buffer per (possibly fused) op and reading
++// GPUStartTime/GPUEndTime. Fully serialized, so total != production time, but
++// per-kernel GPU attribution is exact. Apple silicon has no per-dispatch
++// counter sampling, hence this approach. See docs/metal-batch-kickoff.md.
++static enum ggml_status ggml_metal_graph_compute_profile(ggml_metal_t ctx, struct ggml_cgraph * gf) {
++    struct prof_entry { char key[192]; double us; int count; };
++    enum { PROF_MAX = 1024 };
++    static struct prof_entry agg[PROF_MAX];
++    int n_agg = 0;
++    double total_us = 0.0;
++    int n_ops = 0;
++
++    ggml_metal_device_rsets_keep_alive(ctx->dev);
++
++    @autoreleasepool {
++        if (ctx->cmd_buf_last) {
++            [ctx->cmd_buf_last waitUntilCompleted];
++            ctx->cmd_buf_last = nil;
++        }
++
++        id<MTLCommandQueue> queue = ggml_metal_device_get_queue(ctx->dev);
++
++        fprintf(stderr, "[metal-profile] profiling graph: n_nodes=%d (serialized, one cmd_buf per op)\n", gf->n_nodes);
++
++        int gf_idx = 0;
++        while (gf_idx < gf->n_nodes) {
++            struct ggml_tensor * node = gf->nodes[gf_idx];
++            if (ggml_op_is_empty(node->op) || ggml_is_empty(node)) {
++                gf_idx++;
++                continue;
++            }
++
++            id<MTLCommandBuffer> cmd_buf = [queue commandBuffer];
++
++            ggml_metal_op_t ctx_op = ggml_metal_op_init(
++                ctx->dev, cmd_buf, gf, gf_idx, gf->n_nodes,
++                ctx->use_fusion, ctx->use_concurrency, false, 0, 0);
++
++            const int res = ggml_metal_op_encode(ctx_op, 0);
++
++            ggml_metal_op_free(ctx_op); // ends encoding
++
++            if (res < 1) {
++                fprintf(stderr, "[metal-profile] encode failed at node %d (%s)\n", gf_idx, ggml_op_name(node->op));
++                return GGML_STATUS_FAILED;
++            }
++
++            [cmd_buf commit];
++            [cmd_buf waitUntilCompleted];
++
++            if ([cmd_buf status] != MTLCommandBufferStatusCompleted) {
++                fprintf(stderr, "[metal-profile] cmd_buf failed at node %d (%s)\n", gf_idx, ggml_op_name(node->op));
++                return GGML_STATUS_FAILED;
++            }
++
++            const double us = ([cmd_buf GPUEndTime] - [cmd_buf GPUStartTime]) * 1e6;
++            total_us += us;
++            n_ops++;
++
++            char key[192];
++            if (node->op == GGML_OP_MUL_MAT || node->op == GGML_OP_MUL_MAT_ID) {
++                snprintf(key, sizeof(key), "%-12s %-5s w=[%lldx%lld] ne11=%lld",
++                         ggml_op_name(node->op),
++                         ggml_type_name(node->src[0]->type),
++                         node->src[0]->ne[1], node->src[0]->ne[0],
++                         node->src[1]->ne[1]);
++            } else if (res > 1) {
++                snprintf(key, sizeof(key), "%s(fused x%d)", ggml_op_name(node->op), res);
++            } else {
++                snprintf(key, sizeof(key), "%s", ggml_op_name(node->op));
++            }
++
++            int slot = -1;
++            for (int i = 0; i < n_agg; i++) {
++                if (strcmp(agg[i].key, key) == 0) { slot = i; break; }
++            }
++            if (slot == -1 && n_agg < PROF_MAX) {
++                slot = n_agg++;
++                snprintf(agg[slot].key, sizeof(agg[slot].key), "%s", key);
++                agg[slot].us = 0.0;
++                agg[slot].count = 0;
++            }
++            if (slot >= 0) {
++                agg[slot].us += us;
++                agg[slot].count++;
++            }
++
++            // advance past the `res` non-empty nodes just encoded
++            int consumed = 0;
++            while (gf_idx < gf->n_nodes && consumed < res) {
++                struct ggml_tensor * t = gf->nodes[gf_idx];
++                if (!(ggml_op_is_empty(t->op) || ggml_is_empty(t))) {
++                    consumed++;
++                }
++                gf_idx++;
++            }
++        }
++    }
++
++    // sort by total time, descending (insertion sort, n_agg is small)
++    for (int i = 1; i < n_agg; i++) {
++        struct prof_entry tmp = agg[i];
++        int j = i - 1;
++        while (j >= 0 && agg[j].us < tmp.us) { agg[j + 1] = agg[j]; j--; }
++        agg[j + 1] = tmp;
++    }
++
++    fprintf(stderr, "[metal-profile] %d ops, total GPU %.1f ms\n", n_ops, total_us / 1000.0);
++    fprintf(stderr, "[metal-profile] %-52s %6s %10s %8s %6s\n", "key", "count", "total_us", "us/op", "pct");
++    for (int i = 0; i < n_agg; i++) {
++        fprintf(stderr, "[metal-profile] %-52s %6d %10.0f %8.1f %5.1f%%\n",
++                agg[i].key, agg[i].count, agg[i].us, agg[i].us / agg[i].count,
++                100.0 * agg[i].us / total_us);
++    }
++
++    return GGML_STATUS_SUCCESS;
++}
++
+ enum ggml_status ggml_metal_graph_compute(ggml_metal_t ctx, struct ggml_cgraph * gf) {
+     if (ctx->has_error) {
+         GGML_LOG_ERROR("%s: backend is in error state from a previous command buffer failure - recreate the backend to recover\n", __func__);
+         return GGML_STATUS_FAILED;
+     }
+ 
++    // GGML_METAL_PROFILE_COMPUTE=N -> profile the Nth compute (countdown like
++    // GGML_METAL_CAPTURE_COMPUTE), then resume normal operation
++    {
++        static int profile_compute = -2;
++        if (profile_compute == -2) {
++            const char * val = getenv("GGML_METAL_PROFILE_COMPUTE");
++            profile_compute = val ? atoi(val) : -1;
++        }
++        if (profile_compute >= 0) {
++            profile_compute--;
++            if (profile_compute == 0) {
++                profile_compute = -1;
++                return ggml_metal_graph_compute_profile(ctx, gf);
++            }
++        }
++    }
++
+     // number of nodes encoded by the main thread (empirically determined)
+     const int n_main = MAX(64, 0.1*gf->n_nodes);
+ 
+@@ -459,6 +595,13 @@
+ 
+     @autoreleasepool {
+         ctx->gf = gf;
++
++        // calibration aid for GGML_METAL_CAPTURE_COMPUTE: maps compute index
++        // to request sequence (see docs/metal-batch-kickoff.md)
++        if (getenv("GGML_METAL_COUNT_COMPUTE")) {
++            static _Atomic int gc_counter = 0;
++            fprintf(stderr, "[graph-compute] #%d n_nodes=%d\n", ++gc_counter, gf->n_nodes);
++        }
+ 
+         ctx->n_nodes_0 = MIN(n_main, gf->n_nodes);
+         ctx->n_nodes_1 = gf->n_nodes - ctx->n_nodes_0;
+--- llama.cpp/ggml/src/ggml-metal/ggml-metal-ops.cpp	2022-03-17 07:00:00
++++ /Users/sebastian/.llamafile/v/0.10.5/ggml-metal-ops.cpp	2026-06-11 20:51:57
+@@ -2063,7 +2063,9 @@
+     // at b=10; crossover is b~13 (mv ~411 projected vs mm ~360-420). Stock
+     // upstream llama.cpp shows the same mm cost at these widths, so this is
+     // kernel-level, not build-level. See docs/metal-batch-kickoff.md.
+-    const int ne11_mm_min = 12;
++    // GGML_METAL_MM_MIN overrides for dispatch-threshold sweeps
++    static const int ne11_mm_min_env = getenv("GGML_METAL_MM_MIN") ? atoi(getenv("GGML_METAL_MM_MIN")) : 0;
++    const int ne11_mm_min = ne11_mm_min_env > 0 ? ne11_mm_min_env : 12;
+ 
+     // first try to use small-batch mat-mv kernels
+     // these should be efficient for BS [2, ~8]
