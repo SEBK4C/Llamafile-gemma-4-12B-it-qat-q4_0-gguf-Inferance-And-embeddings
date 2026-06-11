@@ -1,0 +1,42 @@
+Subject: server: don't load the draft model when no speculator will use it
+
+has_dft() only checked that a draft model path/repo was configured, so the
+server loaded the drafter even when speculation is disabled. With a plain
+draft model that just wastes memory (types defaults to {NONE} and no
+speculative impl consumes the context). With an MTP assistant gguf it
+crashes: the drafter is loaded as a regular draft context (the MTP context
+type is only set when draft-mtp is among the enabled types), and building
+a normal graph for the head-only MTP checkpoint asserts at
+llama-graph.cpp "missing result_norm/result_embd tensor".
+
+Hit in practice by our packaged llamafile, whose baked-in .args pass
+"-md /zip/mtp-....gguf --spec-type draft-mtp": with the 0012 patch a user
+appending "--spec-type none" correctly resets the type list, but the
+baked-in -md remained and aborted the server at startup.
+
+Make has_dft() additionally require that an enabled speculative type
+actually consumes a draft model (draft-simple, draft-eagle3, draft-mtp).
+Both call sites (draft-model load and --fit VRAM reservation in
+server-context.cpp) want exactly this semantic.
+
+diff --git a/common/common.h b/common/common.h
+index 13f3872..043a41f 100644
+--- a/common/common.h
++++ b/common/common.h
+@@ -358,7 +358,15 @@ struct common_params_speculative {
+     common_params_speculative_ngram_cache ngram_cache;
+ 
+     bool has_dft() const {
+-        return !draft.mparams.path.empty() || !draft.mparams.hf_repo.empty();
++        // a configured draft model counts only if an enabled speculative type
++        // will actually consume it (e.g. --spec-type none must win over a
++        // baked-in -md, see llamafile .args)
++        const bool wants_draft_model = std::any_of(types.begin(), types.end(), [](auto t) {
++            return t == COMMON_SPECULATIVE_TYPE_DRAFT_SIMPLE ||
++                   t == COMMON_SPECULATIVE_TYPE_DRAFT_EAGLE3 ||
++                   t == COMMON_SPECULATIVE_TYPE_DRAFT_MTP;
++        });
++        return wants_draft_model && (!draft.mparams.path.empty() || !draft.mparams.hf_repo.empty());
+     }
+ 
+     uint32_t need_n_rs_seq() const {

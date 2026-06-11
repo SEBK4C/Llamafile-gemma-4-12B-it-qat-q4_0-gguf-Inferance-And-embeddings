@@ -1,7 +1,7 @@
 # Gemma 4 12B llamafile — inference *and* embeddings from one server instance
 
 This repo bridges [mozilla-ai/llamafile](https://github.com/mozilla-ai/llamafile)
-(v0.10.5 on this branch, built from source with the Cosmopolitan toolchain) with
+(v0.10.7 on this branch, built from source with the Cosmopolitan toolchain) with
 [google/gemma-4-12B-it-qat-q4_0-gguf](https://huggingface.co/google/gemma-4-12B-it-qat-q4_0-gguf)
 and serves **chat completions and embeddings from a single model instance** —
 one set of weights in memory, one KV cache, one port:
@@ -73,7 +73,7 @@ cosine(v[0], v[1])
 | `GEMMA4_NGL` | `999` | GPU layers (Metal on macOS; see caveats) |
 | `GEMMA4_MM` | `1` | image + audio input via the mmproj; `0` for text-only |
 | `GEMMA4_SPEC` | `draft-mtp`* | speculative decoding type (`none`, `ngram-simple`, `ngram-cache`, `draft-mtp`); *defaults to `draft-mtp` when `models/mtp-*.gguf` exists, else `ngram-simple` |
-| `GEMMA4_SPEC_NMAX` | `2` | draft-mtp draft length (2 is the measured optimum on M4 Metal) |
+| `GEMMA4_SPEC_NMAX` | `2` | draft-mtp draft length (2 is the measured optimum on M4 Metal; 4 wins on CUDA) |
 | `GEMMA4_CKPT` | `0` | context checkpoints per slot; `0` avoids a hidden second full forward pass on every prefill (−130 ms/request on M4). Set `32` (upstream default) for cheap mid-history rollback in chat UIs with frequent edits |
 | `GEMMA4_DRAFT` | unset | path to a draft GGUF (e.g. gemma-4-E2B) for classic draft-model speculation |
 
@@ -118,19 +118,38 @@ paging under load. Disk: 7.2 GB for the packaged artifact (or 7.1 GB of
 models + a 35 MB binary when built from source). >4 GB executables can't run
 on Windows — use `bin/llamafile` with external weights there.
 
-**NVIDIA/CUDA (e.g. RTX 4090):** untested by us so far. The 4090's 24 GB VRAM
-fits the model + KV comfortably and raw bandwidth (~1 TB/s) should put
-baseline decode well above the M4. Two caveats: llamafile needs a one-time
-`--recompile` with the CUDA toolkit installed for native GPU support, and
-upstream llama.cpp currently has an open bug cluster around MTP speculative
-decoding on CUDA (flash-attn crashes: ggml-org/llama.cpp #24376, #24314,
-#24457). If generation crashes or draft acceptance looks broken, fall back to
-`--spec-type ngram-simple` and please report what you saw.
+**NVIDIA/CUDA (validated on 2× RTX 4090, CUDA 12.8):** the packaged file now
+bundles a CUDA backend DSO (TinyBLAS — needs only the NVIDIA driver, not the
+toolkit; real SASS for sm_80/86/89, PTX for sm_75/90), extracted to
+`~/.llamafile` on first run. MTP speculative decoding works on CUDA with
+flash attention enabled — the upstream crash cluster (ggml-org/llama.cpp
+#24376, #24314, #24457: `fattn.cu` aborts during MTP draft-context init)
+did not reproduce on sm_89. If you hit it on other architectures (reported
+on sm_87/Jetson and HIP), `--flash-attn off` is the known-good workaround
+and MTP keeps most of its gain. Measured, greedy, 400 fresh tokens:
+
+| config | prose tok/s | edit/copy tok/s |
+|---|---|---|
+| `--spec-type none` | 95 | 93 |
+| baked defaults (MTP n=2, `-sm layer` across 2 GPUs) | 115 | 142 |
+| `-sm none` (single GPU; the 7 GB model fits easily) | 155 | 189 |
+| `-sm none --spec-draft-n-max 4` ← recommended | 165 | 239 |
+
+Two CUDA-specific notes: the dual-GPU layer split costs ~25% single-stream
+(pipeline hop per token) — prefer `-sm none` whenever the model fits on one
+card; and CUDA's batched verify is cheap enough that draft length 4 beats
+the Metal-tuned default of 2 (which on a 4090 is roughly speed-neutral on
+prose at 1.65× the no-spec baseline either way — n=4 adds another ~25% on
+edit/RAG-style output).
+
+To rebuild the bundled DSO: `vendor/llamafile/llamafile/cuda.sh
+--minimize-size --output models/ggml-cuda.so` (CUDA toolkit ≥ 12.0 needed at
+build time only; `package.sh` bakes `models/ggml-cuda.so` in when present).
 
 ## Layout
 
 ```
-vendor/llamafile/      SEBK4C/llamafile fork @ v0.10.5 (submodule; nests llama.cpp)
+vendor/llamafile/      SEBK4C/llamafile fork @ v0.10.7 (submodule; nests llama.cpp)
 patches/               our llama.cpp fixes, applied by `make setup` (see below)
 scripts/               fetch-model / serve / package / apply-patches
 package/gemma4.args    args baked into the single-file build
@@ -188,6 +207,38 @@ artifact (`--spec-draft-n-max 2 --fit off`): **20 tok/s single-slot on
 the M4, 1.5× baseline**, +14% on CPU, outputs verified byte-identical to
 non-speculative decoding. `scripts/serve.sh` keeps ngram-simple as its
 default; opt in with `GEMMA4_SPEC=draft-mtp`.
+
+### MTP on CUDA (validated 2026-06-11, 2× RTX 4090)
+
+MTP pays off much more on CUDA than the Metal numbers suggest — the no-spec
+baseline on a 4090 is 93–97 tok/s and `draft-mtp` lifts it to 155–165 tok/s
+on prose (1.65×) and up to 239 tok/s on edit/copy tasks (2.5×) with
+`-sm none --spec-draft-n-max 4` (see the NVIDIA/CUDA requirements section
+for the full table). Acceptance on greedy prose is ~40–55% depending on
+draft length. The upstream CUDA+MTP flash-attn crash cluster did not
+reproduce on sm_89 with `-fa auto` (resolves to on). One measurement trap
+worth knowing: before patch 0012, `--spec-type none` on the packaged file
+did NOT disable the baked-in drafter (types append), so naive A/B runs
+compare MTP against itself — if your "baseline" prints `draft_n` in
+timings, it's not a baseline.
+
+Three fixes came out of the CUDA validation, all server/CLI-side:
+
+- `patches/0012-spec-type-none-resets-list.patch` — `--spec-type` appends
+  values (by design, so types can combine), which made it impossible to
+  disable the baked-in `draft-mtp` from the CLI. `none` now resets the
+  accumulated list: `--spec-type none` disables speculation, and
+  `--spec-type none --spec-type ngram-simple` replaces the default instead
+  of adding to it.
+- `patches/0013-skip-draft-model-load-when-spec-disabled.patch` —
+  `has_dft()` ignored the enabled types, so the baked-in `-md` loaded the
+  drafter even with speculation off (wasted VRAM with a normal draft gguf;
+  startup abort with the head-only MTP gguf).
+- `patches/0014-draft-context-no-embeddings.patch` — the draft/MTP context
+  inherited `--embeddings --pooling mean` from the server config and
+  asserted in `build_pooling` ("missing result_norm/result_embd tensor"):
+  the MTP assistant graph has no result_norm. Embeddings always come from
+  the target context, so the draft context now clears both flags.
 
 ### The Metal finding: ggml's small-batch matmul kernels underperform on M4
 

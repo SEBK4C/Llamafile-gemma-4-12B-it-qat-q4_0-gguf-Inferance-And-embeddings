@@ -1,0 +1,42 @@
+Subject: server: draft/MTP context must not inherit --embeddings/--pooling
+
+The draft context only produces logits for drafting; pooled embeddings
+are served by the target context. params_dft copies params_base, so a
+server started with --embeddings --pooling mean created its draft/MTP
+context with embeddings enabled too, and build_pooling then asserts at
+llama-graph.cpp "missing result_norm/result_embd tensor" on graphs
+without a result_norm tensor -- which is exactly the head-only Gemma4
+MTP assistant. Hit with the packaged dual-mode llamafile (chat +
+embeddings + baked-in MTP drafter) when run with explicit spec flags.
+
+Clear embeddings/pooling for both draft-context creation paths (-md
+draft model, and the MTP-against-target fallback).
+
+diff --git a/tools/server/server-context.cpp b/tools/server/server-context.cpp
+index 07759f4..f334080 100644
+--- a/tools/server/server-context.cpp
++++ b/tools/server/server-context.cpp
+@@ -941,6 +995,13 @@ private:
+ 
+             auto cparams = common_context_params_to_llama(params_dft);
+ 
++            // the draft context only produces logits for drafting; embeddings
++            // come from the target context. Inheriting --embeddings/--pooling
++            // here makes build_pooling assert on graphs without a result_norm
++            // tensor (e.g. the head-only Gemma4 MTP assistant).
++            cparams.embeddings   = false;
++            cparams.pooling_type = LLAMA_POOLING_TYPE_NONE;
++
+             const bool spec_mtp = std::find(params_base.speculative.types.begin(),
+                                             params_base.speculative.types.end(),
+                                             COMMON_SPECULATIVE_TYPE_DRAFT_MTP) != params_base.speculative.types.end();
+@@ -964,6 +1025,9 @@ private:
+                     params_base.model.path.c_str());
+ 
+             auto cparams_mtp = common_context_params_to_llama(params_base);
++            // see above: the MTP context must not inherit --embeddings/--pooling
++            cparams_mtp.embeddings    = false;
++            cparams_mtp.pooling_type  = LLAMA_POOLING_TYPE_NONE;
+             cparams_mtp.ctx_type      = LLAMA_CONTEXT_TYPE_MTP;
+             cparams_mtp.type_k        = params_base.speculative.draft.cache_type_k;
+             cparams_mtp.type_v        = params_base.speculative.draft.cache_type_v;

@@ -14,6 +14,10 @@ Fix: honor the embd_all flag (as llama_memory_hybrid and the recurrent
 cache already do) by using split_seq(), which keeps each sequence whole
 within a ubatch.
 
+
+Note: the llama-kv-cache.cpp (unified cache) half of this fix was
+absorbed into the SEBK4C/llamafile fork's llama.cpp overlay at the
+0.10.7 bump; only the iSWA-cache half remains here.
 diff --git a/src/llama-kv-cache-iswa.cpp b/src/llama-kv-cache-iswa.cpp
 index 26e2cb4..f039483 100644
 --- a/src/llama-kv-cache-iswa.cpp
@@ -62,28 +66,3 @@ index 26e2cb4..f039483 100644
  
      // first try simple split
      do {
-diff --git a/src/llama-kv-cache.cpp b/src/llama-kv-cache.cpp
-index a49a055..b5a7ca1 100644
---- a/src/llama-kv-cache.cpp
-+++ b/src/llama-kv-cache.cpp
-@@ -628,14 +628,17 @@ llama_memory_context_ptr llama_kv_cache::init_batch(
-             llama_batch_allocr & balloc,
-             uint32_t n_ubatch,
-             bool embd_all) {
--    GGML_UNUSED(embd_all);
--
-     do {
-         balloc.split_reset();
- 
-         std::vector<llama_ubatch> ubatches;
-         while (true) {
--            auto ubatch = n_stream == 1 ? balloc.split_simple(n_ubatch) : balloc.split_equal(n_ubatch, true);
-+            // if all tokens are output (pooled embeddings), split by sequence so
-+            // that a sequence never spans multiple ubatches — otherwise the
-+            // pooled embedding only covers the tokens of its final ubatch
-+            auto ubatch = embd_all      ? balloc.split_seq(n_ubatch)
-+                        : n_stream == 1 ? balloc.split_simple(n_ubatch)
-+                                        : balloc.split_equal(n_ubatch, true);
- 
-             if (ubatch.n_tokens == 0) {
-                 break;

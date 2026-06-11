@@ -19,8 +19,14 @@ MMPROJ="${ROOT}/models/mmproj-gemma-4-12b-it-qat-q4_0.gguf"
 # package/gemma4.args (--spec-type draft-mtp, n_max 2, --fit off):
 # 1.52x baseline on Metal (needs the fork d4c192d Metal fix), +14% on CPU
 # — see docs/mtp-status.md. Opt out at runtime:
-#   ./gemma4-server.llamafile --spec-type ngram-simple
+#   ./gemma4-server.llamafile --spec-type none
 DRAFTER="${ROOT}/models/mtp-gemma-4-12b-it-qat-q4_0.gguf"
+# NVIDIA CUDA backend DSO: baked in when present so the packaged file works
+# on NVIDIA GPUs out of the box (extracted to ~/.llamafile on first run; no
+# CUDA toolkit needed — TinyBLAS build, only libcuda driver required).
+# Build it with: vendor/llamafile/llamafile/cuda.sh --minimize-size \
+#   --output models/ggml-cuda.so
+CUDA_DSO="${ROOT}/models/ggml-cuda.so"
 OUT="${ROOT}/dist/gemma4-server.llamafile"
 
 for f in "${ROOT}/bin/llamafile" "${ROOT}/bin/zipalign"; do
@@ -40,6 +46,11 @@ cp "${ROOT}/package/gemma4.args" "${TMP}/.args"
 # -j0: store aligned + uncompressed so weights mmap directly from the zip
 [ -f "$DRAFTER" ] || { echo "error: $DRAFTER missing — default args enable draft-mtp" >&2; exit 1; }
 EXTRA="$DRAFTER"
+if [ -f "$CUDA_DSO" ]; then
+    EXTRA="$EXTRA $CUDA_DSO"
+else
+    echo "note: $CUDA_DSO missing — packaging without bundled NVIDIA GPU support"
+fi
 "${ROOT}/bin/zipalign" -j0 "$OUT" "$MODEL" "$MMPROJ" $EXTRA "${TMP}/.args"
 chmod +x "$OUT"
 

@@ -1,0 +1,39 @@
+Subject: arg: let --spec-type none override earlier --spec-type values
+
+--spec-type appends to params.speculative.types on every occurrence so
+comma/repeat usage can combine speculators. But that means a packaged
+llamafile whose baked-in .args set "--spec-type draft-mtp" can never be
+switched off from the CLI: "--spec-type none" just appends NONE, which
+the enabled-configs bitmask ignores, and draft-mtp stays active. The
+README documents "--spec-type none" as the off switch, and benchmarking
+against a no-speculation baseline is impossible without it.
+
+Make "none" reset the accumulated list instead of appending.
+common_speculative_types_from_names() already collapses any list
+containing "none" to exactly {NONE}, so:
+
+  --spec-type none                          -> speculation disabled
+  --spec-type none --spec-type ngram-simple -> exactly ngram-simple
+                                               (replaces baked-in default)
+
+Plain values keep the append-to-combine semantics.
+
+diff --git a/common/arg.cpp b/common/arg.cpp
+--- a/common/arg.cpp
++++ b/common/arg.cpp
+@@ -3652,7 +3652,14 @@
+         [](common_params & params, const std::string & value) {
+             const auto types_str = string_split<std::string>(value, ',');
+             auto types = common_speculative_types_from_names(types_str);
+-            params.speculative.types.insert(params.speculative.types.end(), types.begin(), types.end());
++            // "none" resets the accumulated list so a CLI --spec-type none can
++            // disable a default baked into a llamafile's .args (which appends
++            // CLI args after the baked-in ones)
++            if (!types.empty() && types[0] == COMMON_SPECULATIVE_TYPE_NONE) {
++                params.speculative.types = std::move(types);
++            } else {
++                params.speculative.types.insert(params.speculative.types.end(), types.begin(), types.end());
++            }
+         }
+     ).set_spec().set_examples({LLAMA_EXAMPLE_SPECULATIVE, LLAMA_EXAMPLE_SERVER, LLAMA_EXAMPLE_CLI}).set_env("LLAMA_ARG_SPEC_TYPE"));
+     add_opt(common_arg(
