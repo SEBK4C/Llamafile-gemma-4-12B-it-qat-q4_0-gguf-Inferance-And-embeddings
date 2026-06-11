@@ -94,10 +94,21 @@
 >    Qwen-gated-delta-net only (`ggml_gated_delta_net` signature change),
 >    no backport needed.
 >
-> Next: (a) end-to-end draft-mtp n-sweep with `--ctx-checkpoints 0` +
-> mm_min=7, re-check optimal n; (b) ship mm_min=7 + the env overrides into
-> the canonical patches; (c) H-kernel work with the profiler as the
-> measurement loop. Verification gates unchanged.
+> **n-sweep rerun (same day, ckpt0 + mm_min=7, bench_spec prose/edit
+> tok/s):** no-spec 13.1/13.0; n=1 21.2/22.6; **n=2 21.6/24.9 (still
+> optimal)**; n=3 18.0/22.7; n=4 16.2/22.4; n=6 13.0/19.9; n=8 13.1/22.8.
+> Control (n=2, shipped flags) 21.2/25.1 — i.e. ckpt0+mm_min don't move
+> DECODE speed (verify batches never split, and b=3 is below the mm
+> crossover); they're prefill/TTFT wins only. Acceptance decays 82% (n=1)
+> → 36% (n=8); n=8 edit stays 22.8 because long drafts pay off only when
+> copying. Conclusion unchanged: moving the optimum to n≈4-6 (the +30%)
+> requires flattening verify(b=3..7), i.e. the fused multi-column mv
+> kernel (H-kernel).
+>
+> Next: (a) ship mm_min=7 + the env overrides into the canonical patches;
+> consider `--ctx-checkpoints 0` in serve.sh Metal mode (prefill/TTFT);
+> (b) H-kernel work with the profiler as the measurement loop.
+> Verification gates unchanged.
 
 ## Mission
 
