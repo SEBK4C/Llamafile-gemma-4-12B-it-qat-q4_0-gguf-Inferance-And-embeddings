@@ -34,7 +34,8 @@ nothing — no commits, no logs; redo from scratch).
 | Metal draft-mtp n=8 | 11.39 | −14% (acceptance halves to 30%) |
 | Metal ngram-simple | 13.18 | ±0 |
 
-**Conclusion: draft-mtp is a CPU-mode win and a Metal loss.** Metal+MTP
+**Conclusion: draft-mtp is a CPU-mode win and a Metal loss.** (Fixing the
+Metal loss is its own mission — kickoff doc: `docs/mtp-metal-kickoff.md`.) Metal+MTP
 throughput equals CPU+MTP to within noise — strong evidence the scheduler
 places the MTP/aliased-KV graph segments on CPU, dragging the whole decode
 down. Upstream knows Metal MTP underperforms (issues #23752, #23011 —
