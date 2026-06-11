@@ -21,18 +21,25 @@
 #                    The projector runs on CPU (--no-mmproj-offload): it is a
 #                    thin encoder-free projection, and the Metal conv kernels
 #                    of this ggml vintage assert on its op shapes.
-#   GEMMA4_SPEC      speculative decoding   (default ngram-simple: model-free
-#                    self-speculation, ~+15% on edit/RAG-style outputs, neutral
-#                    on freeform prose; "none" disables; on machines with >24GB
-#                    pass GEMMA4_DRAFT=path/to/gemma-4-E2B_q4_0-it.gguf to use
-#                    classic draft-model speculation instead)
-#                    "draft-mtp" = true MTP via Google's 423M assistant drafter
-#                    (models/mtp-*.gguf, see docs/mtp-status.md). Measured on
-#                    the M4/16GB: +14% on neutral prose in CPU mode (-ngl 0),
-#                    but SLOWER than baseline on Metal — the aliased-KV graph
-#                    lands on CPU (upstream llama.cpp #23752). Recommended only
-#                    together with GEMMA4_NGL=0.
-#   GEMMA4_SPEC_NMAX draft-mtp draft length (default 4)
+#   GEMMA4_SPEC      speculative decoding. Default: "draft-mtp" when the MTP
+#                    drafter (models/mtp-*.gguf) is present — true MTP via
+#                    Google's 423M assistant drafter, measured 1.6x baseline
+#                    on M4 Metal (21.5 vs 13.1 tok/s prose, 25 tok/s on edit
+#                    tasks) and +14% in CPU mode; see docs/mtp-status.md.
+#                    Falls back to "ngram-simple" (model-free self-speculation,
+#                    ~+15% on edit/RAG-style outputs) without the drafter.
+#                    "none" disables; on machines with >24GB pass
+#                    GEMMA4_DRAFT=path/to/gemma-4-E2B_q4_0-it.gguf to use
+#                    classic draft-model speculation instead.
+#   GEMMA4_SPEC_NMAX draft-mtp draft length (default 2 — measured optimum on
+#                    M4 Metal; longer drafts lose to the batched-verify cost
+#                    until the Metal matmul kernels are fixed)
+#   GEMMA4_CKPT      context checkpoints per slot (default 0). The upstream
+#                    default (32) splits every prefill into two full forward
+#                    passes to snapshot SWA KV state — that costs ~130 ms per
+#                    request on M4 Metal (b=16 prefill: 472 -> 267 ms with 0).
+#                    Set GEMMA4_CKPT=32 to restore cheap mid-history rollback
+#                    for chat UIs with frequent edits/regenerates.
 set -eu
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -47,11 +54,14 @@ VISION_ARGS=""
 [ "${GEMMA4_MM:-1}" = "1" ] && [ -f "$MMPROJ" ] && VISION_ARGS="--mmproj ${MMPROJ} --no-mmproj-offload"
 
 DRAFTER="${ROOT}/models/mtp-gemma-4-12b-it-qat-q4_0.gguf"
-SPEC_ARGS="--spec-type ${GEMMA4_SPEC:-ngram-simple}"
-if [ "${GEMMA4_SPEC:-}" = "draft-mtp" ]; then
+SPEC_DEFAULT="ngram-simple"
+[ -f "$DRAFTER" ] && SPEC_DEFAULT="draft-mtp"
+SPEC="${GEMMA4_SPEC:-$SPEC_DEFAULT}"
+SPEC_ARGS="--spec-type ${SPEC}"
+if [ "$SPEC" = "draft-mtp" ]; then
     [ -f "$DRAFTER" ] || { echo "error: $DRAFTER missing — see docs/mtp-status.md" >&2; exit 1; }
     # --fit off: the fit probe cannot construct the MTP context (upstream quirk)
-    SPEC_ARGS="--spec-type draft-mtp -md ${DRAFTER} --spec-draft-n-max ${GEMMA4_SPEC_NMAX:-4} --fit off"
+    SPEC_ARGS="--spec-type draft-mtp -md ${DRAFTER} --spec-draft-n-max ${GEMMA4_SPEC_NMAX:-2} --fit off"
 fi
 [ -n "${GEMMA4_DRAFT:-}" ] && SPEC_ARGS="--spec-type draft-simple -md ${GEMMA4_DRAFT}"
 
@@ -61,6 +71,7 @@ KV_DIR="${GEMMA4_KV_DIR:-${ROOT}/.kvcache}"
 
 exec "$BIN" --server \
     $SPEC_ARGS \
+    --ctx-checkpoints "${GEMMA4_CKPT:-0}" \
     --slot-save-path "$KV_DIR" \
     -m "$MODEL" \
     $VISION_ARGS \

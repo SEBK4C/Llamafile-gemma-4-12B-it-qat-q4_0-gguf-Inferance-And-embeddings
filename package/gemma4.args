@@ -23,6 +23,8 @@ draft-mtp
 /zip/mtp-gemma-4-12b-it-qat-q4_0.gguf
 --spec-draft-n-max
 2
+--ctx-checkpoints
+0
 --fit
 off
 --slot-save-path

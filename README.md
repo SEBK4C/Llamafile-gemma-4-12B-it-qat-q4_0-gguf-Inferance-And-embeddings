@@ -72,8 +72,60 @@ cosine(v[0], v[1])
 | `GEMMA4_POOLING` | `mean` | `mean`, `last`, `cls`, `none` |
 | `GEMMA4_NGL` | `999` | GPU layers (Metal on macOS; see caveats) |
 | `GEMMA4_MM` | `1` | image + audio input via the mmproj; `0` for text-only |
-| `GEMMA4_SPEC` | `ngram-simple` | speculative decoding type (`none`, `ngram-simple`, `ngram-cache`, …) |
+| `GEMMA4_SPEC` | `draft-mtp`* | speculative decoding type (`none`, `ngram-simple`, `ngram-cache`, `draft-mtp`); *defaults to `draft-mtp` when `models/mtp-*.gguf` exists, else `ngram-simple` |
+| `GEMMA4_SPEC_NMAX` | `2` | draft-mtp draft length (2 is the measured optimum on M4 Metal) |
+| `GEMMA4_CKPT` | `0` | context checkpoints per slot; `0` avoids a hidden second full forward pass on every prefill (−130 ms/request on M4). Set `32` (upstream default) for cheap mid-history rollback in chat UIs with frequent edits |
 | `GEMMA4_DRAFT` | unset | path to a draft GGUF (e.g. gemma-4-E2B) for classic draft-model speculation |
+
+## System requirements & default-launch performance
+
+What you get when you run `./gemma4-server.llamafile` (or `make serve`) with no
+flags: dual-mode server on `127.0.0.1:8080`, context 8192, all layers on GPU
+where available (Metal on Apple silicon), MTP speculative decoding with draft
+length 2, prefill checkpoints off.
+
+### Measured speed (Apple M4 Mac mini, 16 GB, macOS, Metal — the default config)
+
+| workload | tok/s | vs no-spec baseline |
+|---|---|---|
+| freeform prose (greedy, 360 tok) | **21.2–21.6** | 1.6× |
+| edit/copy task (greedy, 400 tok) | **24.9–25.1** | 1.9× |
+| no-spec baseline (`--spec-type none`) | 13.1 | – |
+
+Prefill/TTFT: ~250 ms flat for prompts of 8–25 tokens, ~11 ms/token beyond
+that (the artifact disables the upstream checkpoint prefill split, worth up to
+−43% time-to-first-token vs stock; restore with `--ctx-checkpoints 32`).
+CPU-only mode (`-ngl 0`, any x86_64/arm64 box) is roughly 4–5× slower than
+Metal on the same machine; MTP still gives ~+14% there.
+
+### Memory by context size (measured, default config with MTP drafter + mmproj)
+
+| `-c` (context) | KV + compute (private) | + weights (mmap) | practical total |
+|---|---|---|---|
+| 2048 | ~1.3 GB | 7.1 GB | ~8.4 GB |
+| 8192 (default) | ~2.0 GB | 7.1 GB | ~9.1 GB |
+| 32768 | ~2.4 GB | 7.1 GB | ~9.5 GB |
+
+KV growth is sublinear because most of Gemma 4's 48 layers use sliding-window
+attention (only the global-attention layers scale with context). The weights
+are mmap'd: pages load on demand and the OS can evict them under pressure, so
+"practical total" is steady-state resident size, not a hard allocation.
+
+**Requirements:** 16 GB unified memory recommended on Apple silicon (macOS
+caps the GPU working set at ~12.1 GB on a 16 GB machine — the default config
+fits with room for the OS). 12 GB machines should drop to `-c 4096` and expect
+paging under load. Disk: 7.2 GB for the packaged artifact (or 7.1 GB of
+models + a 35 MB binary when built from source). >4 GB executables can't run
+on Windows — use `bin/llamafile` with external weights there.
+
+**NVIDIA/CUDA (e.g. RTX 4090):** untested by us so far. The 4090's 24 GB VRAM
+fits the model + KV comfortably and raw bandwidth (~1 TB/s) should put
+baseline decode well above the M4. Two caveats: llamafile needs a one-time
+`--recompile` with the CUDA toolkit installed for native GPU support, and
+upstream llama.cpp currently has an open bug cluster around MTP speculative
+decoding on CUDA (flash-attn crashes: ggml-org/llama.cpp #24376, #24314,
+#24457). If generation crashes or draft acceptance looks broken, fall back to
+`--spec-type ngram-simple` and please report what you saw.
 
 ## Layout
 
