@@ -7,13 +7,48 @@
 > llamafile; this branch's mission is **true multi-token-prediction
 > speculative decoding** using Google's official drafter.
 
-## Mission
+## ⚠️ UPDATE 2026-06-11: upstream merged Gemma4 MTP — plan rewritten
 
-Make `google/gemma-4-12B-it-assistant` (423M params, "up to 3× speedup")
-work as a speculative drafter for `gemma-4-12b-it-qat-q4_0.gguf` inside
-this repo's llamafile build, end to end: GGUF conversion, C++ architecture,
-cross-context KV sharing, host drafting protocol, server integration,
-packaging. Target hardware: M4/16GB (drafter adds ~0.5–1 GB).
+llama.cpp PR [#23398](https://github.com/ggml-org/llama.cpp/pull/23398)
+"llama : add Gemma4 MTP" merged 2026-06-07, merge commit
+`04eb4c446d22b63449d5dc41c038987d4d8cc3a6`. It implements essentially the
+design sketched below (same-repo drafter arch + KV-cache sharing with the
+backbone), so **the mission changes from "port the drafter" to "integrate
+the upstream implementation into our llamafile build"**. Verified facts:
+
+- New arch `GEMMA4_ASSISTANT` (`src/models/gemma4-assistant.cpp`); the
+  converter registers `Gemma4AssistantForCausalLM` **and**
+  `Gemma4UnifiedAssistantForCausalLM` — the exact class of our QAT
+  checkpoint. It is generic over `backbone_hidden_size` (written as
+  `embedding_length_out`), so the 12B/3840 backbone should work.
+- **Backbone conversion is unchanged** — our existing
+  `gemma-4-12b-it-qat-q4_0.gguf` stays valid; the drafter is a separate
+  sibling GGUF.
+- Usage: `--spec-type draft-mtp --spec-draft-n-max 4`. Author reports >2×
+  on dense models, ~0.59 aggregate acceptance on mtp-bench (DGX Spark).
+- Caveat: author tested 31B and 26B-4B; explicitly **not** E4B/E2B; the
+  12B is untested upstream — expect it to work (conversion class matches)
+  but verify, don't assume.
+- Our pin `dbe9c0c` is **208 commits behind** the merge. `a731805ced`
+  (source of backport patches 0005/0006) **is an ancestor** of the merge
+  commit, so bumping the pin subsumes those two patches.
+- The PR touches 31 files of core (`llama-kv-cache*`, `llama-graph`,
+  `llama-context`, `llama-memory-hybrid*`, server, conversion) and likely
+  depends on refactors among the 208 intermediate commits — **bump the
+  pin; do not try to cherry-pick the PR onto dbe9c0c** (fallback only if
+  the bump proves unbuildable under cosmocc).
+
+The architecture notes below remain valid as a verification reference
+(parity checks, debugging). The original "hard part" / Option A/B analysis
+and phase plan are superseded — see the revised plan.
+
+## Mission (revised)
+
+Integrate upstream Gemma4 MTP: bump the vendored llama.cpp to
+≥ `04eb4c44`, keep the llamafile overlay + local patch stack building
+under cosmocc, convert `google/gemma-4-12B-it-qat-q4_0-unquantized-assistant`
+(423M) to a drafter GGUF, and ship `--spec-type draft-mtp` working in the
+packaged llamafile. Target hardware: M4/16GB (drafter adds ~0.5–1 GB).
 
 Success criteria, in order:
 1. Drafter GGUF loads and produces logits matching the transformers
@@ -80,7 +115,7 @@ single 423M-param safetensors file):
    backbone verifies all candidates in one forward; next round slices at the
    last accepted token (`n_last_matches`).
 
-## What llama.cpp gives you (in vendor/llamafile/llama.cpp, pin dbe9c0c)
+## What llama.cpp gives you (SUPERSEDED — written against pin dbe9c0c, before #23398 merged)
 
 The existing `--spec-type mtp` host (`COMMON_SPECULATIVE_TYPE_DRAFT_MTP`,
 `common/speculative.cpp` ~line 409) was built for Qwen3.5-style heads and
@@ -98,7 +133,7 @@ self-attends with its own KV cache, and positions advance. Reusable ideas:
 - conversion pattern: `_Qwen35MtpMixin` in `conversion/qwen.py` (separate
   `mtp-*.gguf` export, `--mtp`/`--no-mtp` flags, duplicated embeddings)
 
-## The hard part (why this is core surgery)
+## The hard part (SUPERSEDED — upstream solved this in #23398; kept for context)
 
 llama.cpp memory is strictly per-context: a drafter context cannot read the
 target context's KV cache. The drafter needs, per drafting round, read access
@@ -129,40 +164,45 @@ Design sketch (decide early, prototype before polishing):
   to another context's graph. More general, more invasive, fights the
   scheduler/backend buffer ownership. Only if A dead-ends.
 
-## Suggested phase plan
+## Phase plan (revised 2026-06-11 for upstream #23398)
 
-1. **Recon (half a day).** Read how the 12B gemma4 graph handles its OWN
-   kv-shared layers (`src/models/gemma4.cpp`, `llama-kv-cache-iswa`,
-   `store_full_length_kv` equivalent). Confirm which two backbone layer
-   indices export KV (from the 12B config: last non-shared sliding, last
-   non-shared full). If same-context cross-layer KV reads exist, Option A
-   shrinks dramatically.
-2. **Converter.** Extend `conversion/gemma.py` with a Gemma4UnifiedAssistant
-   class: map tensors (pre/post_projection, layer_scalar, q_proj/q_norm,
-   MLP, norms, embed), write hparams (drafter layer types, windows, rope,
-   the two backbone source-layer indices), merge-into-target layout
-   (Option A) behind a flag. QAT q4_0 unquantized-assistant → q4_0/q8_0
-   GGUF (drafter is small; q8_0 fine).
-3. **Graph.** New `graph_mtp` for gemma4: token+embd input → scaled target
-   embed lookup + concat + pre_projection → 4 layers cross-attending to
-   backbone KV (bidirectional, flipped sliding window, constant pos,
-   scale 1.0, layer_scalar) → final norm → tied logits + post_projection
-   output (expose like qwen35's `t_h_pre_norm` for carryover).
-4. **Host protocol.** New speculative impl (clone draft_mtp, change:
-   post-norm h via standard embeddings API instead of pre-norm staging;
-   recurrence = post_projection output, NOT backbone h; constant pos).
-5. **Parity harness.** Python script: run transformers reference
-   (CPU, float32, the unquantized-assistant + 12B-it) on a fixed prompt,
-   dump drafter logits per step; compare GGUF path. Budget RAM: use short
-   prompts; 12B bf16 won't fit — use the QAT q4_0 ggml side for the
-   backbone and accept tolerance, or extract intermediate fixtures
-   (h_backbone, shared KV) from a Colab/larger box once and check the
-   drafter in isolation against fixtures. Drafter-in-isolation vs fixtures
-   is the cleanest first parity gate.
-6. **Server + bench + package.** `--spec-type` wiring, acceptance/speedup
-   bench vs the ngram-simple baseline (tests/bench_spec.py), package
-   `mtp-*.gguf` into the llamafile (sibling auto-discovery already keys on
-   the `mtp-` filename prefix).
+1. **Bump the pin.** Advance the nested `llama.cpp` submodule inside
+   `vendor/llamafile` from `dbe9c0c` to ≥ `04eb4c446d` (208 commits).
+   Snapshot the pre-bump tree first (the snapshot-diff workflow below) —
+   Mozilla's overlay modifies many llama.cpp files, so the bump is a
+   merge, not a fast-forward, wherever the overlay touched files.
+2. **Rebase the patch stack** (`patches/`, applied by
+   `scripts/apply-patches.sh`):
+   - **Drop 0005/0006** (gemma4uv/ua backport + BUILD.mk) — `a731805ced`
+     is in the new pin. Carry forward only 0006's BUILD.mk idea: new
+     upstream sources (`gemma4-assistant.cpp`, anything else added in the
+     208 commits) need BUILD.mk entries for the cosmocc build.
+   - **Re-validate 0001** (pooled-embeddings ubatch fix): #23398 and the
+     intervening commits churn `llama-kv-cache-iswa` heavily — check if
+     upstream fixed the `embd_all`/`split_equal` bug; rebase otherwise.
+   - **Rebase 0004, 0007, 0008** (SWA reuse, slot-save media gating)
+     against the new server/kv code.
+   - **0002, 0003, lf-0001** are cosmocc/llamafile-side; expect them to
+     apply nearly clean.
+3. **Build under cosmocc.** `make setup && make build` with the new pin;
+   fix BUILD.mk and any cosmocc incompatibilities introduced by the 208
+   new commits. This is the main schedule risk.
+4. **Convert the drafter.** New `Gemma4AssistantModel` in upstream
+   `conversion/gemma.py` accepts `Gemma4UnifiedAssistantForCausalLM` —
+   convert `google/gemma-4-12B-it-qat-q4_0-unquantized-assistant`
+   (drafter is 423M; q8_0 fine). Name it to match the server's sibling
+   auto-discovery (check what `--spec-type draft-mtp` expects in the new
+   pin — `find_best_sibling` keyword was "mtp-" at the old pin; re-verify).
+5. **Verify.** (a) `tests/smoke_test.py` still passes (embeddings,
+   multimodal, KV persistence); (b) drafter loads and `--spec-type
+   draft-mtp` drafts on the M4 — remember the Metal traps below (`-ngl
+   999` or `0`, never partial); (c) greedy-parity spot-check vs the
+   transformers reference if acceptance looks off (the architecture notes
+   below are the reference for that debugging); upstream tested 31B and
+   26B-4B, NOT the 12B, so don't assume correctness.
+6. **Bench + package.** Acceptance/speedup vs the ngram-simple baseline
+   (tests/bench_spec.py; target >1.5× over the 13.4 tok/s baseline),
+   package the drafter GGUF into the llamafile.
 
 ## Assets & repo infra
 
