@@ -75,12 +75,190 @@ voice timbre/prosody) rather than topic.
   by modality, or align first (see dev notes).
 - Within a single modality, relative ranking carries signal in all three
   modalities (topic structure is visible in each same-modality block).
-- Render text at ≥ 26 px when targeting the 224² vision input, and
-  verify legibility with an OCR prompt before trusting image embeddings
-  of documents.
-- **Metal bug**: media inputs on `/v1/embeddings` segfault the Metal
-  backend (chat with media and text embeddings are fine). Use
-  `GEMMA4_NGL=0 make serve` for cross-modal embedding work until fixed.
+- ~~Render text at ≥ 26 px when targeting the 224² vision input~~ —
+  superseded 2026-06-11: rendered-text legibility is broken at *any* font
+  size by an image-pipeline patch-geometry bug (see "Image pipeline
+  distortion" below). Always verify with a temperature-0 OCR prompt
+  before trusting image embeddings of documents.
+- **GPU bug (mitigated)**: media inputs on `/v1/embeddings` crash the GPU
+  backend. Since patch 0009 the server refuses them with HTTP 501 instead
+  of crashing (chat with media and text embeddings are fine on GPU). Use
+  `GEMMA4_NGL=0 make serve` for cross-modal embedding work — details in
+  the WS3 section below.
+
+## Prompted embeddings (WS1, measured 2026-06-11)
+
+Hypothesis from dev-note 4: wrapping media in an instruction pulls the
+pooled representation toward the text manifold. Tested with
+`tests/template_sweep.py` (same wrapper on BOTH sides of the comparison —
+text items embedded wrapped too), mean pooling, CPU backend.
+
+3-topic battery (retrieval is nearest-text over 3 candidates, 6 queries):
+
+| config | xmod-img | xmod-aud | retrieval raw | gap-corrected |
+|---|---|---|---|---|
+| baseline (bare) | 0.34–0.37 | 0.50–0.60 | 2/6 | 3/6 |
+| instr-lead (`read this …: {x}`) | 0.41–0.47 | 0.50–0.61 | 2/6 | 5/6 |
+| instr-trail (`{x}\nthe … above says:`) | 0.52–0.65 | 0.64–0.80 | 2/6 | 5/6 |
+| **prompteol** (`this …: "{x}" means in one word:`) | **0.68–0.76** | 0.60–0.67 | **6/6** | 5/6 |
+
+32-item corpus (`tests/scale_corpus.py` + `tests/scale_eval.py`,
+chance r@1 = 1/32 ≈ 3%, chance r@5 ≈ 16%):
+
+| @32 | baseline | prompteol |
+|---|---|---|
+| image r@1 / r@5 | 1/32 / 4/32 | 2/32 / **11/32** |
+| audio r@1 / r@5 | 2/32 / 7/32 | **7/32** / **14/32** |
+| image same-topic cross-modal sim | 0.351 | **0.714** |
+| audio same-topic cross-modal sim | 0.552 | 0.638 |
+| image cross-topic same-modality sim | 0.739 | 0.883 |
+
+Takeaways:
+
+- The PromptEOL-style compressor template **works cross-modally** even
+  though it failed for text-text anisotropy (2026-06-10) — different
+  mechanism, as suspected. It doubles image→text similarity and is the
+  best zero-training recipe found.
+- But scale deflates small-N optimism: the perfect 6/6 at 3 topics
+  becomes near-chance image r@1 at 32 items (r@5 still ~2× chance);
+  **audio keeps a real 3.5× lift** (r@1 7/32). The reason: the wrapper
+  also *tightens* the image modality cluster (block sim 0.74→0.88), so
+  absolute alignment improves but ranking gains mostly cancel.
+- Margins (min same-topic cross-modal − max cross-topic same-modality)
+  stay negative everywhere: no recipe makes cross-modal sim dominate
+  modality identity. Mixed-modality vector stores remain a bad idea.
+
+## Pooling sensitivity (WS2, measured 2026-06-11)
+
+Researched offline with no server changes: `GEMMA4_POOLING=none` + legacy
+`/embedding` returns per-token rows; `tests/span_pooling.py` pools spans
+in Python (offline L2 normalization — `embd_normalize` is skipped for
+pooling none; one input per request).
+
+**What pooling-none actually exposes** (discovered the hard way): media
+chunk tokens are never output-marked (`mtmd-helper.cpp` sets
+`batch.logits[i] = false`; the all-outputs override in `llama-batch.cpp`
+only fires for pooled types), and leading wrapper text rides inside the
+helper's chunks, so the rows you get for a media input are
+`[last-media-token] + [trailing wrapper tokens]`. Text row 0 is BOS
+(verified content-blind, cos = 1.0 across inputs); media row 0 is
+content-dependent (cos ≈ 0.79 across topics) and ≈ the bare-marker
+embedding (cos 0.995).
+
+Two useful facts fall out:
+
+1. **Media rows are homogeneous**: mean over the ~7 exposed rows
+   reproduces the server's full ~260-row mean to 2 decimals, and the
+   last-media-token alone behaves like the full media average. Media-row
+   span pooling has nothing more to give; a server-side patch for it is
+   not justified on current evidence.
+2. **Trailing-instruction-rows-only pooling (`mean_trail`) gives the best
+   margins seen anywhere** (3 topics: image −0.159 with prompteol vs
+   −0.453 baseline; audio −0.089 with instr-trail vs −0.160) and image
+   xmod up to 0.77–0.81 — but raw retrieval does not beat
+   prompteol/mean.
+
+32-item check (`span_pooling.py --scale`, prompteol template):
+
+| pooling | image r@1 / r@5 | audio r@1 / r@5 | image margin |
+|---|---|---|---|
+| mean_all (≈ server mean) | 2/32 / 11/32 | **7/32 / 14/32** | −0.340 |
+| mean_trail | 2/32 / **12/32** | 4/32 / 12/32 | **−0.300** |
+| last | 1/32 / 7/32 | 2/32 / 10/32 | −0.367 |
+
+(instr-trail template: strictly worse on image; audio `last` reaches
+r@5 13/32 with the lowest audio block sim 0.650, but r@1 stays 2/32.)
+
+**Verdict: span pooling is a negative result at scale.** `mean_trail`
+buys a slightly better image margin and nothing for retrieval, while
+costing audio. The best overall recipe stays **prompteol template ×
+standard mean pooling**, which needs no server change at all — so the
+per-request-pooling server patch contemplated in MM-prompt.md is NOT
+justified on current evidence.
+
+## Image pipeline distortion (discovered 2026-06-11) — read before trusting image numbers
+
+While re-verifying legibility for the 32-item corpus, the OCR spot-check
+failed on images that are pixel-identical (same md5) to ones recorded as
+word-perfect on 2026-06-10. Systematic probing (temperature 0, both CPU
+and Metal, worktree and main-checkout binaries — all identical) shows the
+model does not see what is in the file:
+
+- A square 224×224 image with "HELLO" is described as "a very wide,
+  horizontal banner" with letters "cropped at top and bottom".
+- Multi-line text is read as stacked left-edge slivers: "pasta recipe /
+  uses guanciale / and pecorino" comes back as fragments
+  `re/pe/us/and/pe/co/ri` — the patch grid is reassembled in the wrong
+  shape.
+- Coarse *relative* geometry survives (red square top-left / blue circle
+  bottom-right is localized correctly), and rotation is perceived
+  correctly (rotating the text 90° does not fix reading), so it is not a
+  simple transpose — more like a patch-position/stride mismatch.
+- Rendering at the model-native patch-aligned size (336×336 = 7×7 patches
+  of 48px, which skips the runtime resize entirely) does NOT fix it, so
+  the bug is downstream of the resize — in the gemma4uv projector's
+  patch-position handling (`pos_x`/`pos_y` learned-position inputs in
+  clip.cpp, backported by patch 0005), not in `calc_size_preserved_ratio`.
+- Mechanics for reference: mmproj metadata says `image_size=224,
+  patch_size=16`, gemma4uv folds the 3× merge into the conv → effective
+  48px patches; the runtime enforces a 40-token minimum
+  (`set_limit_image_tokens(40, 280)`), so every 224px image is first
+  bilinear-upscaled 1.5× to 336². The clip.cpp comment "model performs
+  quite poor with small images" is consistent with this bug being
+  upstream, not introduced by our patches.
+
+Consequences:
+
+- The 2026-06-10 "chat OCR reads the renderings word-perfectly" claim
+  does not reproduce and should be considered wrong (sampling luck at
+  temperature 1.0 on 3 short pangram-style sentences).
+- **Image-side embedding numbers measure content extraction failure ×
+  modality gap, entangled** — they are reproducible but their
+  interpretation ("pooling hides what the backbone knows") only holds
+  for audio, where transcription does verify. This neatly explains why
+  audio beats image on every cross-modal metric at scale.
+- Audio numbers are unaffected.
+- Fixing the projector patch-position bug is the highest-leverage open
+  item for image embeddings — likely worth an upstream issue with the
+  sliver-fragment evidence above.
+
+## Metal media-embeddings crash (WS3, 2026-06-11)
+
+The crash from the 2026-06-10 caveat was debugged as far as the tooling
+allows and mitigated:
+
+- **Repro**: Metal (`-ngl 999`) + any media input on `/v1/embeddings` →
+  bare SIGSEGV (no GGML_ASSERT), 100%, immediately after the
+  "embeddings required but some input tokens were not marked as outputs"
+  override. Bisects: all pooling types crash (mean/last), `--spec-type
+  none` still crashes, `GGML_METAL_CONCURRENCY_DISABLE` and
+  `GGML_METAL_FUSION_DISABLE` don't help. Text embeddings on Metal OK,
+  chat+media on Metal OK, media embeddings on CPU OK.
+- **It's an async GPU-side fault, not a bad CPU-side copy**: printf
+  instrumentation shows every host-side extraction offset in-bounds, and
+  the crash point *moves* between runs (sometimes before, sometimes after
+  `llama_decode` returns; once it surfaced as a graceful "Compute error"
+  HTTP 500 — `ggml_backend_sched_graph_compute_async failed with error
+  -1` — proving the error path exists and works when the fault is caught).
+  The failing graph is the media-chunk decode with raw F32 embd input ×
+  `cparams.embeddings` × all-outputs.
+- **Debugger dead ends, for the next attempt**: lldb cannot launch or
+  attach to APE binaries usefully (attach hangs; `/bin/sh` launch is
+  SIP-denied; loader-direct launch never reaches main), cosmo suppresses
+  macOS crash reports, and `MTL_SHADER_VALIDATION=1` reports nothing
+  (fault is not a validated kernel OOB).
+- **Upstream**: no exact match as of 2026-06-11. Closest fixed:
+  PR #23643 (`eef59a764`, 2026-05-29, 3 days after our pin) — embd-batch
+  graph node reading null token ids, segfault-on-GPU class. Closest open:
+  #23072 (Metal embeddings heap corruption on macOS). A pin bump past
+  `eef59a764` (planned by the MTP branch) should be followed by a re-test
+  of this repro.
+- **Interim ship (patch 0009)**: the server now refuses media-embedding
+  requests when GPU offload is active and a GPU device exists — HTTP 501
+  with a message pointing at `GEMMA4_NGL=0 make serve` — instead of
+  crashing. Verified on Metal: media embedding → clean 501 (server
+  stays up), text embeddings and chat+media unaffected; CPU path:
+  full smoke suite + this file's baseline battery reproduce exactly.
 
 ## Dev notes — open questions for later
 
@@ -108,17 +286,18 @@ voice timbre/prosody) rather than topic.
    varies more by voice than by topic, the audio gap decomposes into
    (modality offset) + (speaker offset) — which a per-speaker correction
    could handle.
-3. **Pooling sensitivity.** All numbers are mean-pooling. Does `last`
-   pooling (or pooling only over the media-token span vs the whole
-   sequence) shrink the gap? The media tokens dominate sequence length,
-   so mean pooling mostly averages media-token states.
-4. **Prompted embeddings.** Does wrapping media in an instruction
-   ("transcribe this audio:" / "read this image:") before pooling pull
-   the representation toward the text manifold? Cheap to test, could be
-   a zero-training win — the OCR/transcription *chat* outputs prove the
-   backbone fully extracts the content; the question is purely about
-   what pooling exposes.
-5. **Fix the Metal segfault** for media + pooled-embeddings batches
-   (crash is in graph compute right after the "embeddings required but
-   some input tokens were not marked as outputs" override; CPU path is
-   correct — diff the graphs or bisect ggml-metal ops to isolate).
+3. ~~**Pooling sensitivity.**~~ Answered 2026-06-11 — see "Pooling
+   sensitivity (WS2)" above: negative at scale; standard mean stays best.
+4. ~~**Prompted embeddings.**~~ Answered 2026-06-11 — see "Prompted
+   embeddings (WS1)" above: prompteol template is a real zero-training
+   win for audio; image gains are capped by the pipeline bug (note the
+   premise "chat outputs prove the backbone fully extracts the content"
+   turned out to hold only for audio).
+5. ~~**Fix the Metal segfault**~~ Mitigated 2026-06-11 (patch 0009
+   refuses instead of crashing) — root cause still open, see "Metal
+   media-embeddings crash (WS3)" above. Re-test after any llama.cpp pin
+   bump past `eef59a764`.
+6. **Fix the image-pipeline patch-geometry bug** (see "Image pipeline
+   distortion" above) — highest-leverage open item for image embeddings;
+   suspect the gemma4uv `pos_x`/`pos_y` learned-position inputs in
+   clip.cpp (patch 0005 backport, likely upstream too).

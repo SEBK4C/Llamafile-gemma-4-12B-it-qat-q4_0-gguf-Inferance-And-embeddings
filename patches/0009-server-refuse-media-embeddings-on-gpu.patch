@@ -1,0 +1,41 @@
+Subject: server: refuse media embeddings when GPU offload is active
+
+Media (image/audio) inputs on /v1/embeddings or /embedding crash the GPU
+backend: an async fault in graph compute of the embd-input + pooled-
+embeddings graph kills the process with a bare SIGSEGV (100% repro on
+Metal, M4, -ngl 999, any pooling type; no GGML_ASSERT output). The same
+requests succeed on the CPU backend, text embeddings work on GPU, and
+chat with media works on GPU — only the media x embeddings x GPU combo
+dies. Debugging notes in docs/mm-embedding.md; root cause is somewhere
+in the async GPU execution of the embd-input graph and survives
+GGML_METAL_CONCURRENCY_DISABLE / GGML_METAL_FUSION_DISABLE.
+
+Until the root cause is fixed, refuse such requests with a clear error
+(ERROR_TYPE_NOT_SUPPORTED) pointing at -ngl 0, instead of crashing the
+server. The check requires an actual GPU device to be present, so
+CPU-only machines running with the default -ngl 999 are unaffected.
+
+--- a/tools/server/server-context.cpp
++++ b/tools/server/server-context.cpp
+@@ -4749,6 +4749,21 @@
+             res->error(format_error_response("Input content cannot be empty", ERROR_TYPE_INVALID_REQUEST));
+             return res;
+         }
++
++        // media (image/audio) inputs in pooled-embedding batches crash the GPU
++        // backend (async fault in graph compute of the embd-input + pooling
++        // graph; 100% repro on Metal). Refuse with a clear error instead of
++        // segfaulting. Text embeddings on GPU and media embeddings on CPU work.
++        if (tokens.has_media() && params.n_gpu_layers != 0 &&
++                ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_GPU) != nullptr) {
++            res->error(format_error_response(
++                "Media embeddings are not supported with GPU offload on this build "
++                "(GPU backend crash in the media + pooled-embeddings graph). "
++                "Restart the server with -ngl 0 (GEMMA4_NGL=0 make serve) to embed "
++                "images/audio on the CPU backend.",
++                ERROR_TYPE_NOT_SUPPORTED));
++            return res;
++        }
+     }
+ 
+     int embd_normalize = params.embd_normalize;

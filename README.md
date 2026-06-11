@@ -210,14 +210,17 @@ different directions (cos 0.48). Subtracting the mean offset (the classic
 modality-gap correction) helps only marginally (2/6 → 3/6 retrieval) —
 unlike contrastively-trained encoders, this generative model's modality
 gap is not a clean parallel translation, so cross-modal retrieval needs a
-trained alignment, not a geometric fix. Caveat: render text ≥26px on
-224px images — the vision input is 224²/16px patches and smaller text is
-only partially legible to the model (verify with an OCR prompt first).
+trained alignment, not a geometric fix. Caveat: image understanding of
+rendered text is unreliable regardless of font size — the image pipeline
+distorts patch geometry (the model perceives square inputs as wide/cropped
+strips; see "Image pipeline distortion" in docs/mm-embedding.md). Verify
+with an OCR prompt before trusting image embeddings of documents.
 
-**Metal caveat**: media inputs on the *embeddings* endpoint currently
-segfault the Metal backend (chat with media is fine; text embeddings are
-fine). Run `GEMMA4_NGL=0 make serve` for cross-modal embedding work until
-this is fixed.
+**GPU caveat**: media inputs on the *embeddings* endpoint crash the GPU
+backend (chat with media is fine; text embeddings are fine). The server
+now refuses such requests with HTTP 501 instead of crashing (patch 0009).
+Run `GEMMA4_NGL=0 make serve` to embed images/audio on the CPU backend;
+root-cause notes live in docs/mm-embedding.md.
 
 ## KV cache persistence (hidden dir next to the llamafile)
 

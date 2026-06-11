@@ -4,16 +4,24 @@ patch needed. Restart the server with pooling disabled:
     GEMMA4_NGL=0 GEMMA4_POOLING=none make serve
 
 then the legacy /embedding endpoint ({"content": ...}, same object format as
-/v1/embeddings input) returns PER-TOKEN embedding rows, and we pool arbitrary
+/v1/embeddings input) returns per-token embedding rows, and we pool arbitrary
 spans here in Python:
 
-    python3 tests/span_pooling.py [--config baseline] [--config instr-trail]
+    python3 tests/span_pooling.py --config instr-trail --config prompteol
 
-Span identification is token-count arithmetic: tokenize the wrapper pieces
-around the marker via POST /tokenize; the media rows are the contiguous
-remainder (BOS first; the marker expands to the media chunk). The same span
-logic applies to the text side (content tokens vs wrapper tokens) so every
-pooling variant is symmetric across the comparison.
+IMPORTANT LIMITATION discovered 2026-06-11: with pooling none the server
+only returns rows for TEXT tokens — mtmd-helper marks every media-chunk
+token logits=false (mtmd-helper.cpp:161/179/196), and the all-outputs
+override in llama-batch.cpp only fires for pooled embeddings. So media-row
+pooling (mean-over-media-rows, last-media-token) is NOT offline-testable;
+what IS testable is pooling over the wrapper-text rows, which under causal
+attention attend to all media rows — i.e. exactly the trailing-instruction
+hypotheses. Variants, applied symmetrically to both sides:
+
+    mean_all   mean over every returned row (media side: BOS+wrapper rows)
+    mean_trail mean over rows AFTER the content (media/text) — needs a
+               template with a trailing instruction
+    last       last row
 
 Caveats honoured (from MM-prompt.md):
 - embd_normalize is skipped when pooling is none → we L2-normalize offline.
@@ -44,9 +52,7 @@ def n_tok(url, s):
 
 
 def rows_for(url, payload):
-    """Per-token rows from the legacy /embedding endpoint (pooling none)."""
     r = post(url, "/embedding", {"content": payload})
-    # tolerate both {"embedding": rows} and [{"embedding": rows}] shapes
     if isinstance(r, list):
         r = r[0]
     rows = r["embedding"]
@@ -54,84 +60,126 @@ def rows_for(url, payload):
     return rows
 
 
-POOLERS = ("mean_all", "mean_content", "mean_wrapper", "last", "last_content", "max")
+POOLERS = ("mean_all", "mean_trail", "last")
 
 
-def pool(rows, span, how):
-    """span = (start, end) of the content rows (media chunk / raw text)."""
-    s, e = span
-    content = rows[s:e]
-    wrapper = rows[:s] + rows[e:]
+def pool(rows, n_trail, how):
     if how == "mean_all":
         v = mg.mean(rows)
-    elif how == "mean_content":
-        v = mg.mean(content)
-    elif how == "mean_wrapper":
-        v = mg.mean(wrapper) if wrapper else mg.mean(rows)
+    elif how == "mean_trail":
+        if not n_trail:
+            return None
+        v = mg.mean(rows[-n_trail:])
     elif how == "last":
         v = rows[-1]
-    elif how == "last_content":
-        v = content[-1]
-    elif how == "max":
-        v = [max(c) for c in zip(*rows)]
     return mg.norm(v)
 
 
-def fetch_all(url, cfg, bos):
-    """Returns {(mod, topic): (rows, content_span)}."""
+def fetch_all(url, cfg, bos, items=None):
+    """Returns {(mod, topic): (rows, n_trail)} — n_trail = trailing-wrapper rows.
+
+    items: {key: (words, img_path, wav_path)}; defaults to the 3-topic battery.
+    """
+    if items is None:
+        items = {t: (w, f"{ASSETS}/{t}_224.png", f"{ASSETS}/{t}.wav")
+                 for t, w in TOPICS.items()}
     marker = json.loads(urllib.request.urlopen(url + "/props", timeout=10).read())["media_marker"]
     out = {}
-    for t, words in TOPICS.items():
-        # text: content span = the {text} tokens inside the wrapper
+    for t, (words, img_path, wav_path) in items.items():
         tmpl = cfg["t_text"]
         pre, _, post_s = tmpl.partition("{text}")
         rows = rows_for(url, tmpl.format(text=words))
         n_pre, n_c, n_post = n_tok(url, pre), n_tok(url, words), n_tok(url, post_s)
-        if bos + n_pre + n_c + n_post != len(rows):  # boundary-merge drift: trust ends
-            n_c = len(rows) - bos - n_pre - n_post
-        out[("text", t)] = (rows, (bos + n_pre, bos + n_pre + n_c))
-        # media: content span = the marker expansion (the media chunk rows)
-        for mod, tk, fname in (("image", "t_image", f"{t}_224.png"),
-                               ("audio", "t_audio", f"{t}.wav")):
+        if bos + n_pre + n_c + n_post != len(rows):
+            print(f"  note: text/{t} row count {len(rows)} != "
+                  f"{bos}+{n_pre}+{n_c}+{n_post} (tokenizer boundary merge)")
+        out[("text", t)] = (rows, min(n_post, len(rows) - 1))
+        for mod, tk, fpath in (("image", "t_image", img_path),
+                               ("audio", "t_audio", wav_path)):
             tmpl = cfg[tk]
             pre, _, post_s = tmpl.partition("{marker}")
             rows = rows_for(url, {"prompt_string": tmpl.format(marker=marker),
-                                  "multimodal_data": [mg.b64(f"{ASSETS}/{fname}")]})
+                                  "multimodal_data": [mg.b64(fpath)]})
             n_pre, n_post = n_tok(url, pre), n_tok(url, post_s)
-            s, e = bos + n_pre, len(rows) - n_post
-            assert e - s > 1, f"media span arithmetic broke for {mod}/{t}: {s}..{e} of {len(rows)}"
-            out[(mod, t)] = (rows, (s, e))
-        print(f"fetched rows: {t} "
-              f"(text={len(out[('text', t)][0])}, image={len(out[('image', t)][0])}, "
-              f"audio={len(out[('audio', t)][0])} rows)", flush=True)
+            # media rows are NOT returned (logits=false in mtmd-helper):
+            # expected rows = BOS + leading wrapper + trailing wrapper
+            if bos + n_pre + n_post != len(rows):
+                print(f"  note: {mod}/{t} row count {len(rows)} != "
+                      f"{bos}+{n_pre}+{n_post} (boundary merge)")
+            out[(mod, t)] = (rows, min(n_post, len(rows) - 1))
+        print(f"fetched rows: {t} (text={len(out[('text', t)][0])}, "
+              f"image={len(out[('image', t)][0])}, audio={len(out[('audio', t)][0])})", flush=True)
     return out
 
 
 def detect_bos(url):
-    """Row count minus token count of a bare string reveals BOS handling."""
     s = "hello world"
     return len(rows_for(url, s)) - n_tok(url, s)
+
+
+def scale_metrics(E, keys):
+    """scale_eval-style retrieval over the full corpus per modality."""
+    n = len(keys)
+    out = {}
+    for mod in ("image", "audio"):
+        sims = [[mg.cos(E[(mod, a)], E[("text", b)]) for b in keys] for a in keys]
+        at1 = sum(max(range(n), key=lambda j: sims[i][j]) == i for i in range(n))
+        at5 = sum(i in sorted(range(n), key=lambda j: -sims[i][j])[:5] for i in range(n))
+        block = [mg.cos(E[(mod, keys[i])], E[(mod, keys[j])])
+                 for i in range(n) for j in range(i + 1, n)]
+        same = [sims[i][i] for i in range(n)]
+        out[mod] = {"r@1": at1, "r@5": at5, "n": n,
+                    "mean_xmodal_same": round(sum(same) / n, 4),
+                    "mean_block": round(sum(block) / len(block), 4),
+                    "margin": round(min(same) - max(block), 4)}
+    return out
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--url", default="http://127.0.0.1:8080")
-    ap.add_argument("--config", action="append", default=None,
-                    help="template config name(s) from template_sweep.CONFIGS")
-    ap.add_argument("--json", default=None, help="write raw metrics JSON here")
+    ap.add_argument("--config", action="append", default=None)
+    ap.add_argument("--scale", action="store_true",
+                    help="run on the 32-item corpus (tests/scale_corpus.py)")
+    ap.add_argument("--json", default=None)
     args = ap.parse_args()
-    names = args.config or ["baseline", "instr-trail"]
+    names = args.config or ["instr-trail", "prompteol"]
 
     bos = detect_bos(args.url)
     print(f"BOS rows detected: {bos}")
 
+    items = None
+    if args.scale:
+        from scale_corpus import ASSETS as SCALE_ASSETS, SENTENCES
+        items = {f"{i:02d}": (w, f"{SCALE_ASSETS}/{i:02d}.png", f"{SCALE_ASSETS}/{i:02d}.wav")
+                 for i, w in enumerate(SENTENCES)}
+
     results = {}
     for name in names:
         print(f"== {name} ==", flush=True)
-        data = fetch_all(args.url, CONFIGS[name], bos)
+        data = fetch_all(args.url, CONFIGS[name], bos, items)
         for how in POOLERS:
-            E = {k: pool(rows, span, how) for k, (rows, span) in data.items()}
-            results[f"{name}/{how}"] = mg.metrics(E)
+            E = {k: pool(rows, n_trail, how) for k, (rows, n_trail) in data.items()}
+            if any(v is None for v in E.values()):
+                print(f"  (skipping {how}: template has no trailing wrapper)")
+                continue
+            if args.scale:
+                r = scale_metrics(E, sorted(items))
+                results[f"{name}/{how}"] = r
+                for mod in ("image", "audio"):
+                    d = r[mod]
+                    print(f"  {how:<12} {mod}: r@1={d['r@1']}/{d['n']} r@5={d['r@5']}/{d['n']} "
+                          f"xmod={d['mean_xmodal_same']:.3f} block={d['mean_block']:.3f} "
+                          f"margin={d['margin']:+.3f}", flush=True)
+            else:
+                results[f"{name}/{how}"] = mg.metrics(E)
+
+    if args.scale:
+        if args.json:
+            with open(args.json, "w") as f:
+                json.dump(results, f, indent=1)
+            print("wrote", args.json)
+        return
 
     def rng(xs):
         return f"{min(xs):.2f}-{max(xs):.2f}"
