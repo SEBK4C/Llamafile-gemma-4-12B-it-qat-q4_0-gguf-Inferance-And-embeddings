@@ -2,19 +2,33 @@
 rendered/synthesized with exactly the modality_gap.py recipe (224px canvas,
 26px Helvetica, `say` → 16kHz mono WAV).
 
-    uv run --with pillow python3 tests/scale_corpus.py --make-assets
+    uv run --with pillow python3 tests/scale_corpus.py            # legacy 224px
+    uv run --with pillow python3 tests/scale_corpus.py --native   # 1584px
 
 Writes /tmp/modality_scale/{NN}.png, {NN}.wav and manifest.json.
-Sentences are kept ≤ 80 chars so they fit the 224px canvas at 26px
-(6 lines × ~15 chars); verify legibility with an OCR spot-check before
-trusting image numbers (tests/scale_eval.py --ocr-check).
+
+LEGACY 224px renders (kept in datasets/legacy-224 as a worked example):
+26px glyphs are far below the model's working resolution — the gemma4uv
+runtime upscales every image to fill the soft-token budget (7.07x at the
+1120-token OCR budget), and interpolation cannot restore detail the
+source never had. OCR on these is ~40% reliable. See
+docs/mm-embedding.md "Image pipeline: resolution research".
+
+NATIVE 1584px renders (--native, datasets/native-1584): sized exactly to
+the 1120-token budget (33x33 patches of 48px -> budget-fill resize is a
+no-op), 80px Helvetica, text lines on a 96px pitch starting at y=48 so
+every line occupies whole patch rows (horizontal glyph cuts across patch
+rows are the damaging case — arXiv 2402.07384). Serve with
+`--image-max-tokens 1120` or the runtime will DOWNSCALE these to 768px.
 """
 
+import argparse
 import json
 import os
 import subprocess
 
 ASSETS = "/tmp/modality_scale"
+ASSETS_NATIVE = "/tmp/modality_native"
 
 SENTENCES = [
     "The quick brown fox jumps over the lazy dog",
@@ -52,7 +66,16 @@ SENTENCES = [
 ]
 
 
-def make_assets():
+def make_audio(dest):
+    for i, words in enumerate(SENTENCES):
+        aiff = f"{dest}/{i:02d}.aiff"
+        subprocess.run(["say", words, "-o", aiff], check=True)
+        subprocess.run(["afconvert", "-f", "WAVE", "-d", "LEI16@16000", "-c", "1",
+                        aiff, f"{dest}/{i:02d}.wav"], check=True)
+        os.remove(aiff)
+
+
+def make_assets(audio=True):
     from PIL import Image, ImageDraw, ImageFont
     import textwrap
     os.makedirs(ASSETS, exist_ok=True)
@@ -67,15 +90,50 @@ def make_assets():
             d.text((8, y), line, fill="black", font=font)
             y += 32
         img.save(f"{ASSETS}/{i:02d}.png")
-        aiff = f"{ASSETS}/{i:02d}.aiff"
-        subprocess.run(["say", words, "-o", aiff], check=True)
-        subprocess.run(["afconvert", "-f", "WAVE", "-d", "LEI16@16000", "-c", "1",
-                        aiff, f"{ASSETS}/{i:02d}.wav"], check=True)
-        os.remove(aiff)
+    if audio:
+        make_audio(ASSETS)
     with open(f"{ASSETS}/manifest.json", "w") as f:
         json.dump(SENTENCES, f, indent=1)
     print(f"{len(SENTENCES)} items written to {ASSETS}")
 
 
+def make_native_assets(audio=False):
+    """1584x1584 = the exact gemma4uv input at the 1120-token OCR budget.
+
+    80px Helvetica on a 96px line pitch starting at y=48: every text line
+    occupies exactly two whole 48px patch rows (no horizontal glyph cuts
+    across rows). Audio is identical to the legacy corpus; regenerate only
+    if needed.
+    """
+    from PIL import Image, ImageDraw, ImageFont
+    import textwrap
+    os.makedirs(ASSETS_NATIVE, exist_ok=True)
+    font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 80)
+    for i, words in enumerate(SENTENCES):
+        img = Image.new("RGB", (1584, 1584), "white")
+        d = ImageDraw.Draw(img)
+        y = 48
+        lines = textwrap.wrap(words, width=30)
+        assert len(lines) <= 15, f"sentence {i} too long: {words!r}"
+        for line in lines:
+            d.text((48, y), line, fill="black", font=font)
+            y += 96
+        img.save(f"{ASSETS_NATIVE}/{i:02d}.png")
+    if audio:
+        make_audio(ASSETS_NATIVE)
+    with open(f"{ASSETS_NATIVE}/manifest.json", "w") as f:
+        json.dump(SENTENCES, f, indent=1)
+    print(f"{len(SENTENCES)} native items written to {ASSETS_NATIVE}")
+
+
 if __name__ == "__main__":
-    make_assets()
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--native", action="store_true",
+                    help="render the 1584px patch-aligned corpus instead")
+    ap.add_argument("--audio", action="store_true",
+                    help="also synthesize WAVs (say + afconvert)")
+    args = ap.parse_args()
+    if args.native:
+        make_native_assets(audio=args.audio)
+    else:
+        make_assets(audio=True)

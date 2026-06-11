@@ -54,9 +54,13 @@ def main():
     ap.add_argument("--url", default="http://127.0.0.1:8080")
     ap.add_argument("--config", default="baseline")
     ap.add_argument("--mods", default="image,audio")
+    ap.add_argument("--img-dir", default=None,
+                    help="directory with NN.png renders (default: the legacy "
+                         "224px assets dir); audio always comes from ASSETS")
     ap.add_argument("--ocr-check", action="store_true")
     ap.add_argument("--json", default=None)
     args = ap.parse_args()
+    img_dir = args.img_dir or ASSETS
     if args.ocr_check:
         ocr_check(args.url)
         return
@@ -70,13 +74,14 @@ def main():
     print(f"embedded {n} texts", flush=True)
     M = {}
     for mod in mods:
-        ext = "png" if mod == "image" else "wav"
         tmpl = cfg["t_image" if mod == "image" else "t_audio"]
         M[mod] = []
         for i in range(n):
+            fpath = (f"{img_dir}/{i:02d}.png" if mod == "image"
+                     else f"{ASSETS}/{i:02d}.wav")
             M[mod].append(mg.norm(embed(args.url, {
                 "prompt_string": tmpl.format(marker=marker),
-                "multimodal_data": [mg.b64(f"{ASSETS}/{i:02d}.{ext}")]})))
+                "multimodal_data": [mg.b64(fpath)]})))
             if (i + 1) % 8 == 0:
                 print(f"embedded {i + 1}/{n} {mod}", flush=True)
 
