@@ -264,11 +264,21 @@ server via the mtmd API, so clients just send standard OpenAI content parts:
 {"type": "input_audio", "input_audio": {"data": "<base64>", "format": "wav"}}
 ```
 
-Verified on this machine: exact color/position grounding on synthetic
-images, and word-perfect transcription of spoken audio (`say`-generated,
-16 kHz mono WAV). ~19-28 s per image/audio turn on the M4 (the projector
-runs on CPU — `--no-mmproj-offload` — because this ggml vintage's Metal
-conv kernels assert on the projector's op shapes; the 12B stays on Metal).
+Verified on this machine: coarse visual grounding (color/position) and
+word-perfect transcription of spoken audio (`say`-generated, 16 kHz mono
+WAV). ~19-28 s per image/audio turn on the M4 (the projector runs on CPU —
+`--no-mmproj-offload` — because this ggml vintage's Metal conv kernels
+assert on the projector's op shapes; the 12B stays on Metal).
+
+> **Update (2026-06-11, later the same day)**: root-caused and largely
+> fixed — the runtime kept small images below the soft-token budget the
+> model was trained on (patch 0010 restores reference budget-fill resize,
+> bicubic, F32 accumulation). For OCR-ish work also serve with
+> `--image-max-tokens 1120` (Google's recommended budget; default 280).
+> Residual weakness is architectural: the 12B *Unified* vision path is
+> encoder-free, so fine text tops out around ~60–65% word recall — use a
+> ViT-path model for OCR that must work. Full story in
+> docs/mm-embedding.md and docs/session-2026-06-11-summary.md.
 
 Support required backporting upstream commit `a731805ced` (the `gemma4uv`
 / `gemma4ua` unified projector types postdate our llama.cpp pin) — carried
@@ -301,14 +311,17 @@ different directions (cos 0.48). Subtracting the mean offset (the classic
 modality-gap correction) helps only marginally (2/6 → 3/6 retrieval) —
 unlike contrastively-trained encoders, this generative model's modality
 gap is not a clean parallel translation, so cross-modal retrieval needs a
-trained alignment, not a geometric fix. Caveat: render text ≥26px on
-224px images — the vision input is 224²/16px patches and smaller text is
-only partially legible to the model (verify with an OCR prompt first).
+trained alignment, not a geometric fix. Caveat: image understanding of
+rendered text is unreliable regardless of font size — the image pipeline
+distorts patch geometry (the model perceives square inputs as wide/cropped
+strips; see "Image pipeline distortion" in docs/mm-embedding.md). Verify
+with an OCR prompt before trusting image embeddings of documents.
 
-**Metal caveat**: media inputs on the *embeddings* endpoint currently
-segfault the Metal backend (chat with media is fine; text embeddings are
-fine). Run `GEMMA4_NGL=0 make serve` for cross-modal embedding work until
-this is fixed.
+**GPU caveat**: media inputs on the *embeddings* endpoint crash the GPU
+backend (chat with media is fine; text embeddings are fine). The server
+now refuses such requests with HTTP 501 instead of crashing (patch 0009).
+Run `GEMMA4_NGL=0 make serve` to embed images/audio on the CPU backend;
+root-cause notes live in docs/mm-embedding.md.
 
 ## KV cache persistence (hidden dir next to the llamafile)
 

@@ -1,0 +1,152 @@
+Subject: gemma4uv: budget-fill image preprocessing + F32 projector accumulation
+
+Port of chippydip/llama.cpp gemma4uv-vision-fix (db40e8c5) onto our pin.
+
+The unified Gemma 4 vision path was using smart_resize semantics (keep
+image size when within min/max token bounds), but the reference
+Gemma4UnifiedImageProcessor.get_aspect_ratio_preserving_size ALWAYS
+rescales (up or down) so the image fills the soft-token budget
+(max_soft_tokens=280 -> 768x768 for square inputs). The model never saw
+small patch grids in training; feeding it a 49-token image produces
+garbled perception ("cropped/zoomed" confabulation, text read as
+per-patch slivers). Upstream's 40-token minimum was a partial mitigation
+of the same issue.
+
+- new mtmd_image_preprocessor_gemma4: aspect-preserving budget-fill
+  resize (floor each side to a multiple of the 48px patch), BICUBIC
+  (reference uses bicubic+antialias; bilinear loses text detail),
+  direct resize without padding
+- gemma4uv graph: force F32 accumulation on the patch-embedding and
+  final projection matmuls (F16 accumulation overflows on high-contrast
+  patches -> Inf/NaN on CUDA-class backends; upstream issue #24251)
+
+Note: image token count for typical inputs rises to ~256, so chat and
+(CPU-only) media-embedding requests carry longer prompts.
+--- a/tools/mtmd/mtmd-image.cpp
++++ b/tools/mtmd/mtmd-image.cpp
+@@ -177,6 +177,27 @@
+         }
+ 
+         return {w_bar, h_bar};
++    }
++
++    // calculate the size of the **resized** image, while preserving the aspect ratio,
++    // so that the resized image fills (just under) a fixed patch budget.
++    // ref: transformers Gemma4UnifiedImageProcessor.get_aspect_ratio_preserving_size
++    //   factor = sqrt(target_px / (h*w)); each side scaled by factor then floored to a
++    //   multiple of align_size. Unlike calc_size_preserved_ratio (smart_resize), this
++    //   always scales to fill the budget (upscaling small images), matching Gemma4.
++    static clip_image_size calc_size_fill_budget(const clip_image_size & inp_size, const int align_size, const int target_pixels) {
++        GGML_ASSERT(align_size > 0);
++        if (inp_size.width <= 0 || inp_size.height <= 0 || target_pixels <= 0) {
++            return {0, 0};
++        }
++        const double total_px = (double) inp_size.width * (double) inp_size.height;
++        const double factor   = std::sqrt((double) target_pixels / total_px);
++        auto floor_by_factor = [f = align_size](double x) {
++            return std::max(f, static_cast<int>(std::floor(x / static_cast<double>(f))) * f);
++        };
++        const int target_width  = floor_by_factor(factor * inp_size.width);
++        const int target_height = floor_by_factor(factor * inp_size.height);
++        return {target_width, target_height};
+     }
+ 
+     // draw src image into dst image at offset (offset_x, offset_y)
+@@ -902,6 +923,34 @@
+ }
+ 
+ //
++// mtmd_image_preprocessor_gemma4
++//
++
++bool mtmd_image_preprocessor_gemma4::preprocess(const clip_image_u8 & img, clip_image_f32_batch & output) {
++    GGML_ASSERT(hparams.image_max_pixels > 0);
++    clip_image_u8 resized_image;
++    const clip_image_size original_size{img.nx, img.ny};
++    // gemma4uv folds the 3x3 token-merge into a 48px patch (patch_size already *= n_merge,
++    // n_merge reset to 1), so the resized image must be a multiple of patch_size (=48).
++    const int cur_merge = hparams.n_merge == 0 ? 1 : hparams.n_merge;
++    const int align     = hparams.patch_size * cur_merge;
++    // Gemma4 always scales (up or down) to fill the soft-token budget, preserving aspect ratio.
++    const clip_image_size target_size = img_tool::calc_size_fill_budget(
++        original_size,
++        align,
++        hparams.image_max_pixels);
++    // direct resize (no padding) to match transformers tvF.resize(..., BICUBIC, antialias).
++    // The reference uses bicubic; bilinear loses high-frequency detail (e.g. text).
++    img_tool::resize(img, resized_image, target_size,
++                        RESIZE_ALGO_BICUBIC,
++                        PAD_NONE);
++    clip_image_f32_ptr img_f32(clip_image_f32_init());
++    img_u8_to_f32(resized_image, *img_f32, hparams.image_mean, hparams.image_std);
++    output.entries.push_back(std::move(img_f32));
++    return true;
++}
++
++//
+ // mtmd_image_preprocessor_longest_edge
+ //
+ 
+--- a/tools/mtmd/mtmd-image.h
++++ b/tools/mtmd/mtmd-image.h
+@@ -102,6 +102,14 @@
+     bool preprocess(const clip_image_u8 & img, clip_image_f32_batch & output) override;
+ };
+ 
++// Gemma4 unified vision: aspect-ratio-preserving resize that always fills the soft-token
++// patch budget (image_max_pixels), aligned to patch_size. ref:
++// transformers Gemma4UnifiedImageProcessor.get_aspect_ratio_preserving_size
++struct mtmd_image_preprocessor_gemma4 : mtmd_image_preprocessor {
++    mtmd_image_preprocessor_gemma4(const clip_ctx * ctx) : mtmd_image_preprocessor(ctx) {}
++    bool preprocess(const clip_image_u8 & img, clip_image_f32_batch & output) override;
++};
++
+ // similar to mtmd_image_preprocessor_dyn_size, but resize the image to have longest edge equal to hparams.image_longest_edge, while preserving aspect ratio
+ struct mtmd_image_preprocessor_longest_edge : mtmd_image_preprocessor {
+     mtmd_image_preprocessor_longest_edge(const clip_ctx * ctx) : mtmd_image_preprocessor(ctx) {}
+--- a/tools/mtmd/mtmd.cpp
++++ b/tools/mtmd/mtmd.cpp
+@@ -482,13 +482,22 @@
+                     image_preproc = std::make_unique<mtmd_image_preprocessor_dyn_size>(ctx_v);
+                 } break;
+             case PROJECTOR_TYPE_GEMMA4V:
+-            case PROJECTOR_TYPE_GEMMA4UV:
+                 {
+                     // <|image> ... (image embeddings) ... <image|>
+                     img_beg = "<|image>";
+                     img_end = "<image|>";
+                     image_preproc = std::make_unique<mtmd_image_preprocessor_dyn_size>(ctx_v);
+                 } break;
++            case PROJECTOR_TYPE_GEMMA4UV:
++                {
++                    // <|image> ... (image embeddings) ... <image|>
++                    img_beg = "<|image>";
++                    img_end = "<image|>";
++                    // encoder-free unified vision: the model is trained with every image
++                    // resized to fill the soft-token budget; smart_resize keeps small
++                    // images small, putting them out of distribution (garbled perception)
++                    image_preproc = std::make_unique<mtmd_image_preprocessor_gemma4>(ctx_v);
++                } break;
+             case PROJECTOR_TYPE_DEEPSEEKOCR:
+                 {
+                     img_end = "\n"; // prevent empty batch on llama-server
+--- a/tools/mtmd/models/gemma4uv.cpp
++++ b/tools/mtmd/models/gemma4uv.cpp
+@@ -20,6 +20,9 @@
+         // inp shape: [patch_size * patch_size * c, n_patches]
+ 
+         inp = ggml_mul_mat(ctx0, model.patch_embeddings_0, inp);
++        // 6912-wide reduction over high-contrast patches overflows F16 accumulation
++        // (GGML_CUDA_F16) -> Inf/NaN; force F32 accumulation like other clip projectors.
++        ggml_mul_mat_set_prec(inp, GGML_PREC_F32);
+         inp = ggml_add(ctx0, inp, model.patch_bias);
+         // inp shape: [n_embd, n_patches]
+ 
+@@ -63,6 +66,7 @@
+         // embedding_pre_projection_norm
+         cur = ggml_rms_norm(ctx0, cur, hparams.eps);
+         cur = build_mm(model.mm_input_proj_w, cur);
++        ggml_mul_mat_set_prec(cur, GGML_PREC_F32);
+         cb(cur, "projected", -1);
+     }
+ 
