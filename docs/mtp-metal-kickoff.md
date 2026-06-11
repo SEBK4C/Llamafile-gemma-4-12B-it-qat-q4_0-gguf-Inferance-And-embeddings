@@ -115,6 +115,12 @@ leaves ~311 ms per verify round where a single baseline decode step costs
   for the reproducible 522/268 fingerprint.
 - One 12B server per GPU; kill by PID, never `pkill -f` patterns (shared
   machine etiquette; a sibling session was collateral damage once).
+- **The production server runs on port 8080** (from
+  `~/Projects/Llamafile-gemma-4-12B-…`, CPU `-ngl 0`, old 0.10.3 binary) —
+  LEAVE IT ALONE. It coexists fine with one Metal test instance on 8090
+  (CPU+Metal share mmap'd weights). If it must come down for a RAM-heavy
+  experiment, capture its argv first (`pgrep -fl llamafile`) and restart it
+  after.
 - zsh in this harness: words starting with `=` (e.g. `echo ===`) trigger
   equals-expansion and abort the whole command line.
 - Working reference invocation:
