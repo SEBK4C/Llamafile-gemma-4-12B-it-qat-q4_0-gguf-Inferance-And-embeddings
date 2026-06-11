@@ -25,6 +25,13 @@ nothing — no commits, no logs; redo from scratch).
 
 ## Verification results (2026-06-11, M4 Mac mini 16GB, greedy, 400-token prose)
 
+> **2026-06-11 (later): the Metal loss is FIXED** — root cause was the ggml
+> Metal `mul_mv_ext` small-batch kernels, not CPU placement. See "Metal MTP
+> slowdown: root cause & fix" below. Post-fix Metal numbers: n=2 **20.2
+> tok/s (1.52× baseline)**, n=4 15.5-15.7, baseline/ngram unchanged.
+
+Pre-fix numbers (kept for history):
+
 | Config | gen tok/s | vs baseline |
 |---|---|---|
 | CPU no-spec | 7.95 | — |
@@ -34,33 +41,100 @@ nothing — no commits, no logs; redo from scratch).
 | Metal draft-mtp n=8 | 11.39 | −14% (acceptance halves to 30%) |
 | Metal ngram-simple | 13.18 | ±0 |
 
-**Conclusion: draft-mtp is a CPU-mode win and a Metal loss.** (Fixing the
-Metal loss is its own mission — kickoff doc: `docs/mtp-metal-kickoff.md`.) Metal+MTP
-throughput equals CPU+MTP to within noise — strong evidence the scheduler
-places the MTP/aliased-KV graph segments on CPU, dragging the whole decode
-down. Upstream knows Metal MTP underperforms (issues #23752, #23011 —
-closed "not a bug"); the CPU-placement mechanism observed here is sharper
-than what those issues document and may be worth reporting (by a human —
-llama.cpp restricts AI content).
+~~**Conclusion: draft-mtp is a CPU-mode win and a Metal loss.**~~ The
+"scheduler places the MTP graph on CPU" hypothesis was investigated with
+`GGML_SCHED_DEBUG=2` and is **refuted**: both the target and drafter graphs
+schedule fully on MTL0 (only the standard token-embd GET_ROWS is on CPU,
+same as baseline), graph reuse works, and the drafter costs a flat ~6 ms
+per drafted token. The real cause is below.
+
+## Metal MTP slowdown: root cause & fix (2026-06-11, fixed in fork d4c192d)
+
+**Root cause:** ggml-metal's `mul_mv_ext` "small-batch" kernels (dispatched
+for q4_0 weight matmuls at ne11 ∈ [2,8]) are ~1.7× slower than the plain
+mat-vec kernels on the M4 with llamafile's runtime-compiled dylib. Batched
+decode cost was near-linear in batch width (~47 ms/token at b=2..10 vs
+75 ms for a whole single-token decode — almost zero amortization), and
+speculative *verify* batches (width n_draft+1) live exactly in that window.
+That made each verify round cost ≈ b × a full decode, sinking draft-mtp
+below baseline. It also explains every prior observation:
+
+- Metal+MTP ≡ CPU+MTP was coincidence, not CPU placement.
+- ngram-simple was "unaffected" only because it almost never drafts on
+  neutral prose, so its verify batches stay width 1.
+- Issue #23752's "n_max=0 loses 11%" does NOT reproduce here: our build
+  clamps n_max=0 to 1-token drafts, which WON (+15% pre-fix) — the
+  per-round fixed MTP cost (hidden-state export etc.) is small (~35 ms).
+- nsg=4/8 tuning of the ext kernels changed nothing; forcing the mm
+  matrix-matrix kernel down to b≥2 was even worse (~230-460 ms flat).
+
+**Fix:** disable the ext path so small batches use the plain mv kernels
+(`GGML_METAL_MV_EXT=1` re-enables for experiments). Carried as
+`llama.cpp.patches/patches/ggml_src_ggml-metal_ggml-metal-ops.cpp.patch`,
+fork commit `d4c192d`.
+
+**Post-fix bench (same protocol, 256-token greedy, quiet machine):**
+
+| Config | pre-fix tok/s | post-fix tok/s |
+|---|---|---|
+| Metal no-spec | 13.31 | 13.25-13.35 (unchanged) |
+| Metal draft-mtp n=1 | 15.16 | 20.00 |
+| Metal draft-mtp n=2 | 14.39 | **20.23 (1.52× baseline)** |
+| Metal draft-mtp n=3 | 12.37 | 18.18 |
+| Metal draft-mtp n=4 | 8.95 | 15.74 |
+| Metal ngram-simple | 13.18 | 13.27 (unchanged) |
+
+**Best Metal config is now `--spec-draft-n-max 2`** (n=1 is statistically
+tied; n≥3 loses because verify batches re-enter the still-imperfect b≥3
+zone and acceptance decays). Greedy parity verified: 400-token draft-mtp
+n=4 output is byte-identical to no-spec baseline. Full smoke test PASS in
+the CPU prod config + draft-mtp flags. Note: drafted/accepted counts
+shifted slightly post-fix (540/263 vs 522/268 at 400 tokens) — mv vs ext
+numerics flip an occasional greedy tie; output equality is the parity
+check that matters.
+
+Upstream-report material (by a human — llama.cpp rejects AI content): the
+ext-kernel slowdown measurement, plus the still-odd mm-kernel cost
+(~420 ms flat for b=13..25 where ~100 ms is expected — prefill is ~4×
+slower than it could be, independent of MTP).
 
 Shipped configuration: ngram-simple stays the default; draft-mtp is opt-in
 via `GEMMA4_SPEC=draft-mtp` (serve.sh, auto-adds `-md … --fit off`) or for
 the packaged artifact:
 `./gemma4-server.llamafile -ngl 0 --fit off --spec-type draft-mtp -md /zip/mtp-gemma-4-12b-it-qat-q4_0.gguf`.
-Since prod runs `-ngl 0` anyway (Metal media-embeddings bug), draft-mtp is
-the best prod spec config: +14% on neutral prose where ngram gives ~0.
+draft-mtp is the best prod spec config on CPU (+14% on neutral prose where
+ngram gives ~0) — and now also the best Metal config (1.52× at n=2).
 
-### Two traps found during verification
+### Traps found during verification
 
 1. **Version-keyed dylib cache**: llamafile compiles its Metal backend at
    runtime and caches per version (`~/.llamafile/v/X.Y.Z/`). After ANY
    llama.cpp pin change you MUST bump the llamafile version (done:
    0.10.4, submodule commit 8f03833) or the binary silently loads the
-   stale dylib and falls back to CPU. Symptom: no `ggml_metal_init` in
-   logs, empty `MTL :` feature list, baseline-CPU speeds despite
-   "offloaded 49/49 layers".
+   stale dylib and falls back to CPU. Symptom: baseline-CPU speeds
+   despite "offloaded 49/49 layers". CAUTION: the same trap applies to
+   Metal-source changes WITHOUT a pin change (like fork d4c192d) — the
+   binary early-returns "using cached" whenever the dylib file exists, so
+   `rm -rf ~/.llamafile/v/0.10.4` after installing a new binary with
+   changed Metal sources.
 2. **cosmocc make has no header dependency tracking**: after editing a
    header, `rm` the dependent `.o` files or the rebuild is a no-op.
+3. **The "no `ggml_metal_init` / empty `MTL :` list" symptom is a red
+   herring on 0.10.4**: the dylib's GGML logger isn't wired to llamafile's
+   log, so those lines NEVER appear, even when Metal works. The reliable
+   Metal-is-live check is `MTL0_Mapped model buffer size` /
+   `MTL0 KV buffer size` lines at load. (Debug prints inside the dylib
+   need plain `fprintf(stderr, ...)`, not `GGML_LOG_*`.)
+4. **Fast Metal printf loop** (no 10-min cosmocc rebuild): edit the
+   extracted sources in `~/.llamafile/v/0.10.4/`, compile the dylib
+   manually (mirror the cc flags from `llamafile/metal.c` BuildMetal),
+   and start the server — an existing dylib suppresses re-extraction.
+   You CANNOT just edit the extracted source and `rm` the dylib:
+   extraction byte-compares against the zip member and clobbers local
+   edits whenever it runs. ~30 s per iteration.
+5. **`--recompile` is rejected in `--server` mode** (parser error), even
+   though `FLAG_recompile` is honored by BuildMetal. Use the
+   delete-the-cache-dir workaround instead.
 
 ## The working invocation (local paths skip sibling auto-discovery — `-md` is mandatory)
 

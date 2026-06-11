@@ -1,5 +1,16 @@
 # Kickoff: Option B — make draft-mtp actually fast on Metal
 
+> **RESOLVED 2026-06-11**: mission accomplished in one session — draft-mtp
+> n=2 now does **20.2 tok/s = 1.52× Metal baseline** (target was ≥1.5×).
+> H1 (CPU placement) was refuted by GGML_SCHED_DEBUG; the real culprit was
+> H4, previously unlisted: ggml-metal's `mul_mv_ext` small-batch kernels
+> are ~1.7× slower than the plain mv kernels on M4, making verify batches
+> of width 2-10 cost ~b× a full decode. Fixed by disabling the ext path
+> (fork commit `d4c192d`, env `GGML_METAL_MV_EXT=1` re-enables). Full
+> story, post-fix bench table, and new traps: `docs/mtp-status.md`
+> ("Metal MTP slowdown: root cause & fix"). This doc is kept as the
+> original mission brief.
+
 > Use this as the opening prompt for the Metal-placement debugging sessions.
 > It encodes everything learned on 2026-06-11 (branch `mtp-gemma4-drafter`)
 > so nothing has to be rediscovered. Companions: `docs/mtp-status.md`
