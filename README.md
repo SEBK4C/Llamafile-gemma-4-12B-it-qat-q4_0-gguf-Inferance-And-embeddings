@@ -1,7 +1,7 @@
 # Gemma 4 12B llamafile — inference *and* embeddings from one server instance
 
 This repo bridges [mozilla-ai/llamafile](https://github.com/mozilla-ai/llamafile)
-(v0.10.3, built from source with the Cosmopolitan toolchain) with
+(v0.10.5 on this branch, built from source with the Cosmopolitan toolchain) with
 [google/gemma-4-12B-it-qat-q4_0-gguf](https://huggingface.co/google/gemma-4-12B-it-qat-q4_0-gguf)
 and serves **chat completions and embeddings from a single model instance** —
 one set of weights in memory, one KV cache, one port:
@@ -78,7 +78,7 @@ cosine(v[0], v[1])
 ## Layout
 
 ```
-vendor/llamafile/      mozilla-ai/llamafile @ v0.10.3 (submodule; nests llama.cpp)
+vendor/llamafile/      SEBK4C/llamafile fork @ v0.10.5 (submodule; nests llama.cpp)
 patches/               our llama.cpp fixes, applied by `make setup` (see below)
 scripts/               fetch-model / serve / package / apply-patches
 package/gemma4.args    args baked into the single-file build
@@ -123,24 +123,63 @@ with quotes, code modification — run **~15-16%** faster (15.4 vs 13.3 tok/s).
 it's opt-in: `GEMMA4_SPEC=ngram-cache make serve`, or `GEMMA4_SPEC=none` to
 disable. Embeddings are unaffected (the smoke test verifies this).
 
-**Why not true MTP?** Google ships an official drafter for this model
+**True MTP (this branch).** Google ships an official drafter for this model
 ([gemma-4-12B-it-assistant](https://huggingface.co/google/gemma-4-12B-it-assistant),
-423M params, "up to 3x"), and our llama.cpp vintage has a `draft-mtp` host
-(`--spec-type mtp`, with `mtp-*.gguf` sibling auto-discovery and a
-Qwen3.5-style split-MTP converter). They are not compatible: the Qwen-style
-MTP head self-attends over its own KV cache and consumes *pre-norm* target
-hidden states, while Gemma 4's `Gemma4UnifiedAssistantForCausalLM` has **no
-K/V projections at all** — all 4 drafter layers cross-attend directly to the
-*backbone's* K/V states (post-RoPE K, normed V from the 12B's last
-non-shared sliding and full-attention layers, over the whole context), takes
-*post-norm* hidden states concatenated with the target's scaled token
-embeddings (2×3840→1024), and carries recurrence through a 1024→3840
-`post_projection`. llama.cpp's memory model is strictly per-context — there
-is no mechanism for a drafter context to read the target context's KV cache —
-so a faithful port needs a new cross-context KV-sharing mechanism in core
-llama.cpp plus a new arch, converter and host protocol. That's core-surgery
-scale, not a patch; we documented the full analysis instead and use what
-works today.
+423M params), whose 4 drafter layers cross-attend directly into the
+*backbone's* KV cache — something llama.cpp's per-context memory model
+couldn't express until upstream PR #23398 added the `GEMMA4_ASSISTANT`
+arch with cross-context KV aliasing. This branch integrates that work
+(llama.cpp pin `04eb4c446d`, drafter converted to
+`models/mtp-gemma-4-12b-it-qat-q4_0.gguf`, 449 MB q8_0) and — after the
+Metal fixes below — makes `draft-mtp` the default in the **packaged**
+artifact (`--spec-draft-n-max 2 --fit off`): **20 tok/s single-slot on
+the M4, 1.5× baseline**, +14% on CPU, outputs verified byte-identical to
+non-speculative decoding. `scripts/serve.sh` keeps ngram-simple as its
+default; opt in with `GEMMA4_SPEC=draft-mtp`.
+
+### The Metal finding: ggml's small-batch matmul kernels underperform on M4
+
+Draft-mtp initially ran *31% slower than baseline* on Metal. The cause
+turned out to be nothing MTP-specific: **ggml-metal's `mul_mv_ext`
+"small-batch" kernels (dispatched for q4_0 at batch widths 2–8) are
+~1.7× slower than the plain mat-vec kernels on the M4**, and batched
+decode costs grow near-linearly with width (~47 ms per extra token vs
+75 ms for an entire single-token decode) — speculative *verification*
+batches live exactly in that window, so every spec round cost almost as
+much as decoding its tokens one by one. Uncached-prefill probe
+(`tests/probe_batch_cost.py`, total ms per batch, gemma4-12b q4_0):
+
+| batch width | ext kernels (upstream default) | plain mv (our fix) | mat-mat kernel |
+|---|---|---|---|
+| 2 | 118 | **77** | 227 |
+| 4 | 200 | **119** | 233 |
+| 8 | 387 | **229** | 453 |
+| 10 | 470 | **283** | 454 |
+| 13 | 420 | 367 | 422 |
+
+Crucially, this is **not a llamafile build artifact**: stock upstream
+llama.cpp compiled at the same pin on the same machine probes
+identically (108/194/381/468 ms at widths 2/4/8/10), and brew's
+prebuilt — which ships an offline-compiled metallib — benches the same,
+so neither llamafile's runtime shader compile nor a newer upstream
+version explains it (the kernels and dispatch are unchanged on master).
+Upstream's ext kernels were benchmarked as wins on M1–M3 in 2024; on M4
+they lose everywhere in their window. Nobody appears to have documented
+this. Worth reporting upstream — by a human; llama.cpp does not accept
+AI-authored issues or PRs.
+
+What we ship in the fork ([SEBK4C/llamafile](https://github.com/SEBK4C/llamafile),
+branch `mtp-gemma4-drafter`, v0.10.5): ext kernels disabled by default
+(`GGML_METAL_MV_EXT=1` re-enables), the mat-vec/mat-mat crossover raised
+from 8 to 12, and GGML error-level messages from the Metal dylib
+forwarded to stderr even in non-verbose mode (a silent
+`kIOGPUCommandBufferCallbackErrorOutOfMemory` cost us hours). Still on
+the table: the mat-vec path's ~28 ms/extra-token slope and the mat-mat
+kernel's ~360-420 ms base cost are both far from the ~80-100 ms a
+memory-bound batched step should cost — fixing that is worth roughly
+another +30% on speculative decoding and ~4× on prefill, and needs real
+kernel work with GPU profiling (full Xcode). Mission brief:
+`docs/metal-batch-kickoff.md`.
 
 **Classic draft-model speculation** (for machines with >24 GB unified/GPU
 memory): `gemma-4-E2B-it-qat-q4_0-gguf` (arch `gemma4`, same 262k vocab,
@@ -297,7 +336,7 @@ the card — mirror that in your model card.
   cosine values as anisotropic — compare rankings, not absolute numbers.
 - **Embedding input length** is capped by `GEMMA4_UBATCH` (default 2048
   tokens) because pooled sequences can't split across physical batches.
-- **Metal partial offload is broken** in llamafile 0.10.3 for this model:
+- **Metal partial offload is broken** in llamafile 0.10.x for this model:
   when the auto-fit picks a partial layer split (typically because another
   instance is already holding GPU memory — e.g. two copies of this server),
   generation fails with `graph_compute` errors. Use full offload (`-ngl 999`,
