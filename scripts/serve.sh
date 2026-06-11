@@ -26,6 +26,13 @@
 #                    on freeform prose; "none" disables; on machines with >24GB
 #                    pass GEMMA4_DRAFT=path/to/gemma-4-E2B_q4_0-it.gguf to use
 #                    classic draft-model speculation instead)
+#                    "draft-mtp" = true MTP via Google's 423M assistant drafter
+#                    (models/mtp-*.gguf, see docs/mtp-status.md). Measured on
+#                    the M4/16GB: +14% on neutral prose in CPU mode (-ngl 0),
+#                    but SLOWER than baseline on Metal — the aliased-KV graph
+#                    lands on CPU (upstream llama.cpp #23752). Recommended only
+#                    together with GEMMA4_NGL=0.
+#   GEMMA4_SPEC_NMAX draft-mtp draft length (default 4)
 set -eu
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -39,7 +46,13 @@ MMPROJ="${ROOT}/models/mmproj-gemma-4-12b-it-qat-q4_0.gguf"
 VISION_ARGS=""
 [ "${GEMMA4_MM:-1}" = "1" ] && [ -f "$MMPROJ" ] && VISION_ARGS="--mmproj ${MMPROJ} --no-mmproj-offload"
 
+DRAFTER="${ROOT}/models/mtp-gemma-4-12b-it-qat-q4_0.gguf"
 SPEC_ARGS="--spec-type ${GEMMA4_SPEC:-ngram-simple}"
+if [ "${GEMMA4_SPEC:-}" = "draft-mtp" ]; then
+    [ -f "$DRAFTER" ] || { echo "error: $DRAFTER missing — see docs/mtp-status.md" >&2; exit 1; }
+    # --fit off: the fit probe cannot construct the MTP context (upstream quirk)
+    SPEC_ARGS="--spec-type draft-mtp -md ${DRAFTER} --spec-draft-n-max ${GEMMA4_SPEC_NMAX:-4} --fit off"
+fi
 [ -n "${GEMMA4_DRAFT:-}" ] && SPEC_ARGS="--spec-type draft-simple -md ${GEMMA4_DRAFT}"
 
 # Hidden on-disk KV store: POST /slots/{id}?action=save|restore persists a

@@ -20,8 +20,46 @@ nothing — no commits, no logs; redo from scratch).
 | 3. cosmocc build green | ✅ `bin/llamafile` (50 MB) has `draft-mtp` + `gemma4-assistant` |
 | 4. Upstream recon | ✅ `docs/mtp-upstream-recon.md` (commit `5b045bc`) |
 | 5. Drafter GGUF | ✅ `models/mtp-gemma-4-12b-it-qat-q4_0.gguf` (q8_0, 449 MB, all tensor checks pass) |
-| 6. Verify on M4 | ❌ TODO |
-| 7. Bench + package + patch extraction | ❌ TODO |
+| 6. Verify on M4 | ✅ 2026-06-11: loads, drafts, 51% acceptance; full smoke PASS |
+| 7. Bench + package | ✅ measured (see below); 7.1G artifact with drafter baked in |
+
+## Verification results (2026-06-11, M4 Mac mini 16GB, greedy, 400-token prose)
+
+| Config | gen tok/s | vs baseline |
+|---|---|---|
+| CPU no-spec | 7.95 | — |
+| CPU draft-mtp n=4 | 9.08 | **+14%** |
+| Metal no-spec | 13.23 | — |
+| Metal draft-mtp n=4 | 9.15 | **−31%** |
+| Metal draft-mtp n=8 | 11.39 | −14% (acceptance halves to 30%) |
+| Metal ngram-simple | 13.18 | ±0 |
+
+**Conclusion: draft-mtp is a CPU-mode win and a Metal loss.** Metal+MTP
+throughput equals CPU+MTP to within noise — strong evidence the scheduler
+places the MTP/aliased-KV graph segments on CPU, dragging the whole decode
+down. Upstream knows Metal MTP underperforms (issues #23752, #23011 —
+closed "not a bug"); the CPU-placement mechanism observed here is sharper
+than what those issues document and may be worth reporting (by a human —
+llama.cpp restricts AI content).
+
+Shipped configuration: ngram-simple stays the default; draft-mtp is opt-in
+via `GEMMA4_SPEC=draft-mtp` (serve.sh, auto-adds `-md … --fit off`) or for
+the packaged artifact:
+`./gemma4-server.llamafile -ngl 0 --fit off --spec-type draft-mtp -md /zip/mtp-gemma-4-12b-it-qat-q4_0.gguf`.
+Since prod runs `-ngl 0` anyway (Metal media-embeddings bug), draft-mtp is
+the best prod spec config: +14% on neutral prose where ngram gives ~0.
+
+### Two traps found during verification
+
+1. **Version-keyed dylib cache**: llamafile compiles its Metal backend at
+   runtime and caches per version (`~/.llamafile/v/X.Y.Z/`). After ANY
+   llama.cpp pin change you MUST bump the llamafile version (done:
+   0.10.4, submodule commit 8f03833) or the binary silently loads the
+   stale dylib and falls back to CPU. Symptom: no `ggml_metal_init` in
+   logs, empty `MTL :` feature list, baseline-CPU speeds despite
+   "offloaded 49/49 layers".
+2. **cosmocc make has no header dependency tracking**: after editing a
+   header, `rm` the dependent `.o` files or the rebuild is a no-op.
 
 ## The working invocation (local paths skip sibling auto-discovery — `-md` is mandatory)
 
@@ -34,7 +72,7 @@ bin/llamafile --server \
   -ngl 999 -c 8192 --host 127.0.0.1 --port 8090
 ```
 
-## Remaining work (in order)
+## Original work plan (all done except where noted)
 
 1. **Load + draft check (Metal, -ngl 999)**: greedy chat (temp 0,
    max_tokens ≥256 — thinking channel), confirm drafting + acceptance >50%
@@ -49,13 +87,18 @@ bin/llamafile --server \
    `-md … --spec-type draft-mtp` when `models/mtp-*.gguf` exists (env
    override to fall back to ngram-simple). `make package`, smoke packaged
    artifact, kill it.
-5. **Patch extraction**: snapshot-diff vs `/tmp/mtp-snapshots/` (existence
-   unverified after reboot/cleanup — if gone, re-derive: overlay writes are
-   working-tree-only in the submodule; local submodule commits are the
-   delta).
-6. **Restart prod server**: `.scratch/restart-prod-server.sh` holds the
-   exact argv of the production instance (mm-embedding worktree, port 8080,
-   `-ngl 0`) that was stopped for this window.
+5. **Patch extraction**: DEFERRED by design. The vendor delta lives as 5
+   commits inside the `vendor/llamafile` submodule (`1a50723..8f03833`);
+   converting them to `lf-*.patch` files would also require reordering
+   `make setup` (lf-patches must apply BEFORE the llamafile overlay setup,
+   since two commits regenerate overlay patch files). Until then the
+   submodule commits must be pushed to a llamafile fork for fresh clones
+   to work. Snapshots for future diffing: `/tmp/mtp-snapshots/`.
+6. **Restart prod server**: DONE, but relocated — the mm-embedding
+   worktree was archived (`2026-06-11-mm-embedding-dev-history.zip`), so
+   prod now runs from the main repo
+   (`~/Projects/Llamafile-gemma-4-12B-…`) via `GEMMA4_NGL=0 scripts/serve.sh`,
+   same flags/port as before.
 
 ## Environment constraints (violating these has burned us already)
 

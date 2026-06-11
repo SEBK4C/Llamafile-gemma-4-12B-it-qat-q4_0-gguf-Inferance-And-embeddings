@@ -15,6 +15,11 @@ set -eu
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 MODEL="${ROOT}/models/gemma-4-12b-it-qat-q4_0.gguf"
 MMPROJ="${ROOT}/models/mmproj-gemma-4-12b-it-qat-q4_0.gguf"
+# MTP drafter (optional, +449 MB): baked in when present. Opt in at runtime:
+#   ./gemma4-server.llamafile -ngl 0 --spec-type draft-mtp \
+#     -md /zip/mtp-gemma-4-12b-it-qat-q4_0.gguf --fit off
+# (+14% on CPU; slower than baseline on Metal — see docs/mtp-status.md)
+DRAFTER="${ROOT}/models/mtp-gemma-4-12b-it-qat-q4_0.gguf"
 OUT="${ROOT}/dist/gemma4-server.llamafile"
 
 for f in "${ROOT}/bin/llamafile" "${ROOT}/bin/zipalign"; do
@@ -32,7 +37,9 @@ trap 'rm -rf "$TMP"' EXIT
 cp "${ROOT}/package/gemma4.args" "${TMP}/.args"
 
 # -j0: store aligned + uncompressed so weights mmap directly from the zip
-"${ROOT}/bin/zipalign" -j0 "$OUT" "$MODEL" "$MMPROJ" "${TMP}/.args"
+EXTRA=""
+[ -f "$DRAFTER" ] && EXTRA="$DRAFTER"
+"${ROOT}/bin/zipalign" -j0 "$OUT" "$MODEL" "$MMPROJ" $EXTRA "${TMP}/.args"
 chmod +x "$OUT"
 
 echo "Built $(du -h "$OUT" | cut -f1) $(basename "$OUT")"
