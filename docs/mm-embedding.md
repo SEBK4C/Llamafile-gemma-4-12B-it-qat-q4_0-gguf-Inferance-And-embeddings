@@ -269,6 +269,52 @@ Practical recipe for document/PDF work on this stack:
    E4B/26B/31B = gemma4v, or Qwen2.5-VL-class e.g. olmOCR) — the 12B
    Unified will not get there at any rendering setting.
 
+## Native-resolution gauntlet (2026-06-11, session 2): legibility is NOT the embedding bottleneck
+
+After patch 0010 + the committed native corpora (datasets/), the full
+cross-modal battery was re-run on legible renders (OCR word recall
+~62–64% in chat, vs ~40% pass-rate on legacy-224). All numbers @32
+items, mean pooling, CPU, prompteol template unless noted:
+
+| image corpus / budget | img r@1 | img r@5 | img xmod | img block | audio (unchanged) |
+|---|---|---|---|---|---|
+| legacy-224 @280 (blurry) | 2/32 | 11/32 | 0.714 | 0.883 | r@1 7, r@5 14, xmod 0.638 |
+| native-tight @280 (legible) | 2/32 | 10/32 | 0.656 | 0.884 | identical |
+| native-1584 sq @1120 (legible, 75% white) | 1/32 | 10/32 | 0.598 | **0.973** | identical |
+| (baseline template, tight @280) | 1/32 | 6/32 | 0.284 | 0.803 | r@1 2, r@5 7 |
+
+Three conclusions, two of them decisive:
+
+1. **Image embedding alignment is insensitive to render legibility.**
+   Chat-OCR now extracts most of the content from these renders, yet
+   pooled image embeddings carry no more topic signal than they did
+   from illegible ones. For images, extraction and embedding quality
+   are decoupled problems — the bottleneck is squarely what mean
+   pooling exposes, and neither resolution, patch alignment, nor the
+   1120-token budget moves it. Closes the "would legible inputs fix
+   image embeddings?" question: no.
+2. **Blank area poisons image embeddings** (suggested by S., confirmed
+   by the square-vs-tight contrast): every uniform patch collapses to
+   one vector under patch_ln1, so the 75%-white square renders push
+   cross-topic image similarity to **0.973** — near-degenerate — while
+   content-cropped strips hold 0.884 at a quarter of the token cost.
+   **Tight rendering is mandatory for image embeddings**, and
+   native-tight @ the default 280 budget is the recommended corpus
+   (square-1584 @1120 is strictly worse and 4x slower).
+3. Audio reproduces exactly across binaries/corpora (r@1 7/32, r@5
+   14/32) and remains the only modality whose content reliably
+   survives pooling. Cross-modal image↔text alignment in vector space
+   needs a learned projection (dev note 1) or a different pooling
+   mechanism — input quality and prompting are exhausted as levers.
+
+Dev note added by this round: gemma4uv's explicit per-patch (x,y)
+positions + the HF reference's masked `(-1,-1)` padding make
+**uniform-patch dropping** (skip blank patches in clip.cpp, keep true
+coordinates for survivors) mechanically easy — the in-batch analogue of
+"KV caching for identical image sections". Untested: sparse grids are
+out of training distribution; worth one experiment if image-embedding
+work continues.
+
 ## Metal media-embeddings crash (WS3, 2026-06-11)
 
 The crash from the 2026-06-10 caveat was debugged as far as the tooling
