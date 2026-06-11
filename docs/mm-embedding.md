@@ -353,6 +353,36 @@ allows and mitigated:
   stays up), text embeddings and chat+media unaffected; CPU path:
   full smoke suite + this file's baseline battery reproduce exactly.
 
+## ⚠️ Post-publication correction (2026-06-11): image perception is broken
+
+The mm-embedding-dev branch discovered, and we confirmed **on main**, that
+the gemma4uv vision path scrambles fine-grained geometry: multi-line text
+is perceived as left-edge slivers / hallucinated fragments, on CPU and
+Metal alike, at any font size. Our original legibility check was
+**confounded**: the fox sentence is the world's most famous pangram, and
+the model completed it from priors — non-memorizable sentences (pasta,
+money) fail OCR at temperature 0 (e.g. the money image loops on the
+sliver "er. (US)"). Coarse layout (left/right color split) survives.
+
+Consequences for this document: the **image-side numbers above entangle
+perceptual scrambling with the modality gap** and should be treated as a
+lower bound on image-embedding quality; audio is unaffected (transcription
+is word-perfect), which likely explains audio beating image on cross-modal
+similarity. The text and audio columns stand.
+
+A clean transpose (x/y swap) was **ruled out** empirically: transposed
+images are not readable either.
+
+**Resolution (same day, this branch)**: the positional-embedding suspicion
+did not survive the side-by-side with the transformers reference — pos
+handling, patch order, and weight layout all verified faithful. The real
+divergence was the *preprocessor*: smart_resize kept small images below
+the soft-token budget the model was trained on (out-of-distribution patch
+grids → the scrambled perception described above). Fixed by patch 0010;
+the remaining OCR ceiling is architectural (encoder-free path). See
+"Image pipeline: resolution research + final verdict" below, and the
+native-corpus re-measurements that supersede this section's caveats.
+
 ## Dev notes — open questions for later
 
 1. **Learned alignment instead of mean offset.** The natural next step:

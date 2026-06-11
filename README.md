@@ -173,11 +173,21 @@ server via the mtmd API, so clients just send standard OpenAI content parts:
 {"type": "input_audio", "input_audio": {"data": "<base64>", "format": "wav"}}
 ```
 
-Verified on this machine: exact color/position grounding on synthetic
-images, and word-perfect transcription of spoken audio (`say`-generated,
-16 kHz mono WAV). ~19-28 s per image/audio turn on the M4 (the projector
-runs on CPU — `--no-mmproj-offload` — because this ggml vintage's Metal
-conv kernels assert on the projector's op shapes; the 12B stays on Metal).
+Verified on this machine: coarse visual grounding (color/position) and
+word-perfect transcription of spoken audio (`say`-generated, 16 kHz mono
+WAV). ~19-28 s per image/audio turn on the M4 (the projector runs on CPU —
+`--no-mmproj-offload` — because this ggml vintage's Metal conv kernels
+assert on the projector's op shapes; the 12B stays on Metal).
+
+> **Update (2026-06-11, later the same day)**: root-caused and largely
+> fixed — the runtime kept small images below the soft-token budget the
+> model was trained on (patch 0010 restores reference budget-fill resize,
+> bicubic, F32 accumulation). For OCR-ish work also serve with
+> `--image-max-tokens 1120` (Google's recommended budget; default 280).
+> Residual weakness is architectural: the 12B *Unified* vision path is
+> encoder-free, so fine text tops out around ~60–65% word recall — use a
+> ViT-path model for OCR that must work. Full story in
+> docs/mm-embedding.md and docs/session-2026-06-11-summary.md.
 
 Support required backporting upstream commit `a731805ced` (the `gemma4uv`
 / `gemma4ua` unified projector types postdate our llama.cpp pin) — carried
