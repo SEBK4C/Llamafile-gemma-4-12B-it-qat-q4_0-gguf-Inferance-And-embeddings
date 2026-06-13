@@ -1,0 +1,73 @@
+Subject: [PATCH] server: GPU-safe media embeddings via LAST pooling (end-state)
+
+Gemma 4 12B is natively multimodal: image/audio go through the projector and
+interleave with text in one forward pass; the embedding is the model's end
+hidden state over that sequence. The dedicated pooled-embeddings path forces
+EVERY token to be an output (cparams.embeddings -> output_all), and that
+all-outputs media decode segfaults the GPU backend (docs/mm-embedding.md WS3;
+reproduced on CUDA 2x RTX 4090, not only Metal).
+
+LAST pooling needs only the final token's hidden state, so it does not need
+all-outputs: exclude LAST from output_all and the media decode runs like
+generation (last token only), which works on GPU. Then relax the patch-0009 GPU
+refusal to allow LAST pooling. Net: `--pooling last` returns a working GPU media
+embedding (the end-state of the interleaved pass) for text, image and audio in
+one shared 3840-d space. mean/cls still force all-outputs and stay refused on
+GPU. Supersedes 0009 for the LAST-pooling case.
+
+Verified on 2x RTX 4090 / CUDA 12.8: text+image+audio embeddings all return
+HTTP 200, dim 3840, norm 1.0, server stays up.
+
+diff --git a/src/llama-context.cpp b/src/llama-context.cpp
+--- a/src/llama-context.cpp
++++ b/src/llama-context.cpp
+@@ -1672,8 +1672,15 @@
+     const int64_t n_vocab = vocab.n_tokens();
+     const int64_t n_embd  = hparams.n_embd_inp();
+ 
+-    // when computing embeddings, all tokens are output
+-    const bool output_all   = cparams.embeddings;
++    // when computing embeddings, all tokens are output — EXCEPT for LAST
++    // pooling, where only the final token's hidden state is needed (the
++    // "end state"). Forcing every token to be an output is what segfaults the
++    // GPU backend on a media (image/audio) decode; outputting only the last
++    // token decodes like generation, which works on GPU. So LAST pooling is
++    // the GPU-safe path for native-multimodal embeddings (Gemma 4 12B). See
++    // Chimera.APE docs/GEMMA4-EMBEDDINGS.md.
++    const bool output_all   = cparams.embeddings &&
++                              cparams.pooling_type != LLAMA_POOLING_TYPE_LAST;
+     const bool has_samplers = !sampling.samplers.empty();
+ 
+     const uint32_t n_seq_max = cparams.kv_unified ? LLAMA_MAX_SEQ : cparams.n_seq_max;
+diff --git a/tools/server/server-context.cpp b/tools/server/server-context.cpp
+--- a/tools/server/server-context.cpp
++++ b/tools/server/server-context.cpp
+@@ -4965,17 +4965,20 @@
+             return res;
+         }
+ 
+-        // media (image/audio) inputs in pooled-embedding batches crash the GPU
+-        // backend (async fault in graph compute of the embd-input + pooling
+-        // graph; 100% repro on Metal). Refuse with a clear error instead of
+-        // segfaulting. Text embeddings on GPU and media embeddings on CPU work.
++        // Media (image/audio) on /v1/embeddings used to crash the GPU backend:
++        // pooled embeddings force ALL tokens to be outputs, and the all-outputs
++        // media decode segfaults on GPU (async graph-compute fault). LAST
++        // pooling now outputs only the final token (the "end state" of the
++        // interleaved forward pass — the GPU-safe path, see llama-context.cpp
++        // output_all), so it is allowed on GPU. Other pooling types still force
++        // all-outputs, so keep refusing those on GPU. CPU is always fine.
+         if (tokens.has_media() && params.n_gpu_layers != 0 &&
++                meta->pooling_type != LLAMA_POOLING_TYPE_LAST &&
+                 ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_GPU) != nullptr) {
+             res->error(format_error_response(
+-                "Media embeddings are not supported with GPU offload on this build "
+-                "(GPU backend crash in the media + pooled-embeddings graph). "
+-                "Restart the server with -ngl 0 (GEMMA4_NGL=0 make serve) to embed "
+-                "images/audio on the CPU backend.",
++                "Media embeddings on GPU require LAST pooling (the end-state path): "
++                "start the server with --pooling last. Or use -ngl 0 to embed "
++                "images/audio on the CPU backend with another pooling type.",
+                 ERROR_TYPE_NOT_SUPPORTED));
+             return res;
+         }
