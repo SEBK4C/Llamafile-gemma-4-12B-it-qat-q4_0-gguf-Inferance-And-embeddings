@@ -1,62 +1,37 @@
 		<script>
-		// ── gemma4 voice replies (Kokoro sidecar via /tts, CPU, 0 VRAM) ─────────
-		// Intercepts the UI's own /v1/chat/completions stream to capture the
-		// assistant's reply (content deltas only — thinking is not spoken), then
-		// plays it through POST /tts/v1/audio/speech. No coupling to Svelte DOM.
+		// ── gemma4 voice replies v2 (Kokoro sidecar via /tts, CPU, 0 VRAM) ──────
+		// 1. Speak engine: tees the UI's /v1/chat/completions stream, captures
+		//    assistant `content` deltas (thinking is never spoken), plays via
+		//    POST /tts/v1/audio/speech in a sentence-chunked pipeline.
+		// 2. Composer buttons, inserted left of Send (styling inherited from the
+		//    real Send button so they match the theme):
+		//      🔊  auto-speak toggle (✓ badge when on; shift-click replays last)
+		//      🎙  always-available mic: records 16 kHz mono WAV and attaches it
+		//          through the UI's own file-input pipeline (audio modality).
 		(() => {
 			const TTS = '/tts/v1/audio/speech';
 			const LS = 'gemma-tts-auto';
 			let lastReply = '';
-			let audio = null;        // currently playing Audio element
-			let session = 0;         // bump to cancel an in-flight speak pipeline
+			let audio = null;
+			let session = 0;
 
 			const auto = () => localStorage.getItem(LS) === '1';
-
-			// ── tiny floating controls ────────────────────────────────────────
-			const box = document.createElement('div');
-			box.style.cssText = 'position:fixed;bottom:14px;right:14px;z-index:99999;' +
-				'display:flex;gap:6px;font:14px system-ui;user-select:none';
-			const mkBtn = (label, title) => {
-				const b = document.createElement('button');
-				b.textContent = label;
-				b.title = title;
-				b.style.cssText = 'width:38px;height:38px;border-radius:50%;border:1px solid #555;' +
-					'background:#1b1f20;color:#eee;cursor:pointer;opacity:.75;font-size:17px';
-				b.onmouseenter = () => b.style.opacity = '1';
-				b.onmouseleave = () => b.style.opacity = '.75';
-				box.appendChild(b);
-				return b;
-			};
-			const playBtn = mkBtn('🔊', 'Speak last reply (click again to stop)');
-			const autoBtn = mkBtn('🅰', 'Auto-speak every reply: off');
-			const paintAuto = () => {
-				autoBtn.style.background = auto() ? '#2e7d32' : '#1b1f20';
-				autoBtn.title = 'Auto-speak every reply: ' + (auto() ? 'on' : 'off');
-			};
-			autoBtn.onclick = () => { localStorage.setItem(LS, auto() ? '0' : '1'); paintAuto(); };
-			playBtn.onclick = () => { if (audio && !audio.ended) stop(); else if (lastReply) speak(lastReply); };
-			paintAuto();
-			addEventListener('DOMContentLoaded', () => document.body.appendChild(box));
-			if (document.body) document.body.appendChild(box);
 
 			function stop() {
 				session++;
 				if (audio) { try { audio.pause(); } catch {} audio = null; }
-				playBtn.textContent = '🔊';
 			}
 
-			// sentence-chunked pipeline: fetch chunk N+1 while chunk N plays
 			async function speak(text) {
 				stop();
 				const my = ++session;
 				const chunks = (text.match(/[^.!?]+[.!?]*\s*/g) || [text])
 					.reduce((acc, s) => {
-						const last = acc[acc.length - 1];
-						if (last && last.length + s.length < 300) acc[acc.length - 1] += s;
+						const l = acc[acc.length - 1];
+						if (l && l.length + s.length < 300) acc[acc.length - 1] += s;
 						else acc.push(s);
 						return acc;
 					}, []).filter(c => c.trim());
-				playBtn.textContent = '⏹';
 				const fetchWav = c => fetch(TTS, {
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json' },
@@ -77,7 +52,6 @@
 						if (my !== session) return;
 					}
 				} catch (e) { console.warn('[tts]', e); }
-				if (my === session) playBtn.textContent = '🔊';
 			}
 
 			// ── capture assistant replies from the UI's own requests ──────────
@@ -99,7 +73,7 @@
 							const j = JSON.parse(payload);
 							const c = j.choices && j.choices[0];
 							const d = (c && (c.delta || c.message)) || {};
-							if (d.content) acc += d.content;   // never speak reasoning_content
+							if (d.content) acc += d.content;
 						} catch {}
 					}
 				}
@@ -116,7 +90,7 @@
 				if (!/\/chat\/completions/.test(url)) return p;
 				return p.then(resp => {
 					try {
-						const ct = (resp.headers.get('content-type') || '');
+						const ct = resp.headers.get('content-type') || '';
 						if (resp.ok && resp.body && ct.includes('text/event-stream')) {
 							const [a, b] = resp.body.tee();
 							harvest(b);
@@ -132,6 +106,130 @@
 					return resp;
 				});
 			};
+
+			// ── 16 kHz mono WAV recorder (server's audio decoder wants WAV) ───
+			let rec = null; // {ctx, node, src, samples:[]}
+			function encodeWav(samples, rate) {
+				const n = samples.length;
+				const buf = new ArrayBuffer(44 + n * 2);
+				const v = new DataView(buf);
+				const ws = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+				ws(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); ws(8, 'WAVE');
+				ws(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true);
+				v.setUint16(22, 1, true); v.setUint32(24, rate, true);
+				v.setUint32(28, rate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+				ws(36, 'data'); v.setUint32(40, n * 2, true);
+				for (let i = 0; i < n; i++) {
+					const s = Math.max(-1, Math.min(1, samples[i]));
+					v.setInt16(44 + i * 2, s < 0 ? s * 32768 : s * 32767, true);
+				}
+				return new Blob([buf], { type: 'audio/wav' });
+			}
+
+			async function startRec() {
+				const media = await navigator.mediaDevices.getUserMedia({ audio: true });
+				const ctx = new AudioContext({ sampleRate: 16000 });
+				const src = ctx.createMediaStreamSource(media);
+				const node = ctx.createScriptProcessor(4096, 1, 1);
+				const samples = [];
+				node.onaudioprocess = e => samples.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+				src.connect(node); node.connect(ctx.destination);
+				rec = { ctx, node, src, media, samples };
+			}
+
+			async function stopRec() {
+				const r = rec; rec = null;
+				r.node.disconnect(); r.src.disconnect();
+				r.media.getTracks().forEach(t => t.stop());
+				await r.ctx.close();
+				const total = r.samples.reduce((a, c) => a + c.length, 0);
+				const flat = new Float32Array(total);
+				let o = 0;
+				for (const c of r.samples) { flat.set(c, o); o += c.length; }
+				return encodeWav(flat, 16000);
+			}
+
+			function attachToUi(blob) {
+				const inp = document.querySelector('input[type="file"]');
+				if (!inp) { console.warn('[mic] no file input found'); return; }
+				const f = new File([blob], 'recording-' + Date.now() + '.wav', { type: 'audio/wav' });
+				const dt = new DataTransfer();
+				dt.items.add(f);
+				inp.files = dt.files;
+				inp.dispatchEvent(new Event('change', { bubbles: true }));
+			}
+
+			// ── composer buttons, left of Send ─────────────────────────────────
+			function findSend() {
+				for (const form of document.querySelectorAll('form')) {
+					if (!form.querySelector('textarea')) continue;
+					const btn = form.querySelector('button[type="submit"]');
+					if (btn) return btn;
+				}
+				return null;
+			}
+
+			function ensureButtons() {
+				const send = findSend();
+				if (!send || send.parentElement.querySelector('.g4v-btn')) return;
+
+				const mk = (emoji, title) => {
+					const b = document.createElement('button');
+					b.type = 'button';
+					b.className = send.className;                 // inherit UI theme
+					b.classList.add('g4v-btn');
+					b.title = title;
+					b.style.position = 'relative';
+					b.textContent = emoji;
+					return b;
+				};
+
+				const spk = mk('🔊', 'Auto-speak replies (✓ = on) · shift-click: replay last reply');
+				const badge = document.createElement('span');
+				badge.textContent = '✓';
+				badge.style.cssText = 'position:absolute;top:-4px;right:-4px;font-size:11px;' +
+					'background:#2e7d32;color:#fff;border-radius:50%;width:15px;height:15px;' +
+					'line-height:15px;text-align:center;pointer-events:none';
+				spk.appendChild(badge);
+				const paint = () => badge.style.display = auto() ? 'block' : 'none';
+				paint();
+				spk.onclick = e => {
+					if (e.shiftKey) { if (lastReply) speak(lastReply); return; }
+					localStorage.setItem(LS, auto() ? '0' : '1');
+					if (!auto()) stop();
+					paint();
+				};
+
+				const mic = mk('🎙', 'Record audio message (click to start/stop, attaches as WAV)');
+				mic.onclick = async () => {
+					try {
+						if (!rec) {
+							await startRec();
+							mic.textContent = '⏺';
+							mic.style.color = '#e53935';
+						} else {
+							mic.textContent = '🎙';
+							mic.style.color = '';
+							attachToUi(await stopRec());
+						}
+					} catch (e) {
+						console.warn('[mic]', e);
+						mic.textContent = '🎙';
+						mic.style.color = '';
+						rec = null;
+					}
+				};
+
+				send.parentElement.insertBefore(spk, send);   // [🔊][🎙][Send]
+				send.parentElement.insertBefore(mic, send);
+			}
+
+			let raf = 0;
+			new MutationObserver(() => {
+				cancelAnimationFrame(raf);
+				raf = requestAnimationFrame(ensureButtons);
+			}).observe(document.documentElement, { childList: true, subtree: true });
+			addEventListener('DOMContentLoaded', ensureButtons);
 		})();
 		</script>
 	</body>
