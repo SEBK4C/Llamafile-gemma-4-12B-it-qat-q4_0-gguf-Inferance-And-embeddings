@@ -1,0 +1,138 @@
+		<script>
+		// ── gemma4 voice replies (Kokoro sidecar via /tts, CPU, 0 VRAM) ─────────
+		// Intercepts the UI's own /v1/chat/completions stream to capture the
+		// assistant's reply (content deltas only — thinking is not spoken), then
+		// plays it through POST /tts/v1/audio/speech. No coupling to Svelte DOM.
+		(() => {
+			const TTS = '/tts/v1/audio/speech';
+			const LS = 'gemma-tts-auto';
+			let lastReply = '';
+			let audio = null;        // currently playing Audio element
+			let session = 0;         // bump to cancel an in-flight speak pipeline
+
+			const auto = () => localStorage.getItem(LS) === '1';
+
+			// ── tiny floating controls ────────────────────────────────────────
+			const box = document.createElement('div');
+			box.style.cssText = 'position:fixed;bottom:14px;right:14px;z-index:99999;' +
+				'display:flex;gap:6px;font:14px system-ui;user-select:none';
+			const mkBtn = (label, title) => {
+				const b = document.createElement('button');
+				b.textContent = label;
+				b.title = title;
+				b.style.cssText = 'width:38px;height:38px;border-radius:50%;border:1px solid #555;' +
+					'background:#1b1f20;color:#eee;cursor:pointer;opacity:.75;font-size:17px';
+				b.onmouseenter = () => b.style.opacity = '1';
+				b.onmouseleave = () => b.style.opacity = '.75';
+				box.appendChild(b);
+				return b;
+			};
+			const playBtn = mkBtn('🔊', 'Speak last reply (click again to stop)');
+			const autoBtn = mkBtn('🅰', 'Auto-speak every reply: off');
+			const paintAuto = () => {
+				autoBtn.style.background = auto() ? '#2e7d32' : '#1b1f20';
+				autoBtn.title = 'Auto-speak every reply: ' + (auto() ? 'on' : 'off');
+			};
+			autoBtn.onclick = () => { localStorage.setItem(LS, auto() ? '0' : '1'); paintAuto(); };
+			playBtn.onclick = () => { if (audio && !audio.ended) stop(); else if (lastReply) speak(lastReply); };
+			paintAuto();
+			addEventListener('DOMContentLoaded', () => document.body.appendChild(box));
+			if (document.body) document.body.appendChild(box);
+
+			function stop() {
+				session++;
+				if (audio) { try { audio.pause(); } catch {} audio = null; }
+				playBtn.textContent = '🔊';
+			}
+
+			// sentence-chunked pipeline: fetch chunk N+1 while chunk N plays
+			async function speak(text) {
+				stop();
+				const my = ++session;
+				const chunks = (text.match(/[^.!?]+[.!?]*\s*/g) || [text])
+					.reduce((acc, s) => {
+						const last = acc[acc.length - 1];
+						if (last && last.length + s.length < 300) acc[acc.length - 1] += s;
+						else acc.push(s);
+						return acc;
+					}, []).filter(c => c.trim());
+				playBtn.textContent = '⏹';
+				const fetchWav = c => fetch(TTS, {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ input: c, voice: 'af_heart' })
+				}).then(r => { if (!r.ok) throw new Error('tts http ' + r.status); return r.blob(); });
+				try {
+					let pending = fetchWav(chunks[0]);
+					for (let i = 0; i < chunks.length; i++) {
+						const blob = await pending;
+						if (my !== session) return;
+						if (i + 1 < chunks.length) pending = fetchWav(chunks[i + 1]);
+						await new Promise((res, rej) => {
+							audio = new Audio(URL.createObjectURL(blob));
+							audio.onended = res;
+							audio.onerror = rej;
+							audio.play().catch(rej);
+						});
+						if (my !== session) return;
+					}
+				} catch (e) { console.warn('[tts]', e); }
+				if (my === session) playBtn.textContent = '🔊';
+			}
+
+			// ── capture assistant replies from the UI's own requests ──────────
+			async function harvest(stream) {
+				const dec = new TextDecoder();
+				const rd = stream.getReader();
+				let buf = '', acc = '';
+				for (;;) {
+					const { done, value } = await rd.read();
+					if (done) break;
+					buf += dec.decode(value, { stream: true });
+					const lines = buf.split('\n');
+					buf = lines.pop();
+					for (const ln of lines) {
+						if (!ln.startsWith('data: ')) continue;
+						const payload = ln.slice(6).trim();
+						if (payload === '[DONE]') continue;
+						try {
+							const j = JSON.parse(payload);
+							const c = j.choices && j.choices[0];
+							const d = (c && (c.delta || c.message)) || {};
+							if (d.content) acc += d.content;   // never speak reasoning_content
+						} catch {}
+					}
+				}
+				if (acc.trim()) {
+					lastReply = acc;
+					if (auto()) speak(acc);
+				}
+			}
+
+			const orig = window.fetch;
+			window.fetch = function (input, init) {
+				const url = typeof input === 'string' ? input : (input && input.url) || '';
+				const p = orig.apply(this, arguments);
+				if (!/\/chat\/completions/.test(url)) return p;
+				return p.then(resp => {
+					try {
+						const ct = (resp.headers.get('content-type') || '');
+						if (resp.ok && resp.body && ct.includes('text/event-stream')) {
+							const [a, b] = resp.body.tee();
+							harvest(b);
+							return new Response(a, resp);
+						}
+						if (resp.ok && ct.includes('application/json')) {
+							resp.clone().json().then(j => {
+								const m = j.choices && j.choices[0] && j.choices[0].message;
+								if (m && m.content) { lastReply = m.content; if (auto()) speak(m.content); }
+							}).catch(() => {});
+						}
+					} catch {}
+					return resp;
+				});
+			};
+		})();
+		</script>
+	</body>
+</html>
