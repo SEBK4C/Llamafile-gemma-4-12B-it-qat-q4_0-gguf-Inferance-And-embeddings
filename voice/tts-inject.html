@@ -1,76 +1,98 @@
 		<script>
-		// ── gemma4 voice replies v2 (Kokoro sidecar via /tts, CPU, 0 VRAM) ──────
-		// 1. Speak engine: tees the UI's /v1/chat/completions stream, captures
-		//    assistant `content` deltas (thinking is never spoken), plays via
-		//    POST /tts/v1/audio/speech in a sentence-chunked pipeline.
-		// 2. Composer buttons, inserted left of Send (styling inherited from the
-		//    real Send button so they match the theme):
-		//      🔊  auto-speak toggle (✓ badge when on; shift-click replays last)
-		//      🎙  always-available mic: records 16 kHz mono WAV and attaches it
-		//          through the UI's own file-input pipeline (audio modality).
+		// ── gemma4 voice+controls v3 (Kokoro sidecar via /tts, CPU, 0 VRAM) ─────
+		// Composer buttons left of Send: 🔊 auto-speak (✓ badge) · 🎙 mic (red
+		// while recording) · 0° temperature-zero toggle · 💭 think-every-turn
+		// toggle (fixes the UI freezing enable_thinking off after turn 1).
+		// Under every assistant message: a mini audio player (play/pause +
+		// seekable timeline) that synthesizes the message once and caches it.
 		(() => {
 			const TTS = '/tts/v1/audio/speech';
-			const LS = 'gemma-tts-auto';
+			const LS_AUTO = 'gemma-tts-auto';
+			const LS_T0 = 'gemma-temp0';
+			const LS_THINK = 'gemma-think-always';
 			let lastReply = '';
-			let audio = null;
-			let session = 0;
+			let liveAudio = null;
+			let liveSession = 0;
 
-			const auto = () => localStorage.getItem(LS) === '1';
+			const flag = (k, dflt) => {
+				const v = localStorage.getItem(k);
+				return v === null ? dflt : v === '1';
+			};
+			const setFlag = (k, v) => localStorage.setItem(k, v ? '1' : '0');
 
-			function stop() {
-				session++;
-				if (audio) { try { audio.pause(); } catch {} audio = null; }
+			// align the UI's own default so NEW conversations think by default
+			if (localStorage.getItem('LlamaUi.thinkingEnabledDefault') === null) {
+				localStorage.setItem('LlamaUi.thinkingEnabledDefault', 'true');
 			}
 
-			async function speak(text) {
-				stop();
-				const my = ++session;
-				const chunks = (text.match(/[^.!?]+[.!?]*\s*/g) || [text])
-					.reduce((acc, s) => {
-						const l = acc[acc.length - 1];
-						if (l && l.length + s.length < 300) acc[acc.length - 1] += s;
-						else acc.push(s);
-						return acc;
+			const sanitize = t => t
+				.replace(/```[\s\S]*?```|`[^`]*`/g, ' ')
+				.replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
+				.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+				.replace(/[*_#>|~]+/g, ' ')
+				.replace(/\s+/g, ' ').trim();
+
+			function stopLive() {
+				liveSession++;
+				if (liveAudio) { try { liveAudio.pause(); } catch {} liveAudio = null; }
+			}
+
+			// streaming sentence-pipeline used by auto-speak / composer button
+			async function speakLive(text) {
+				stopLive();
+				const my = ++liveSession;
+				const chunks = (sanitize(text).match(/[^.!?]+[.!?]*\s*/g) || [text])
+					.reduce((a, s) => {
+						const l = a[a.length - 1];
+						if (l && l.length + s.length < 300) a[a.length - 1] += s; else a.push(s);
+						return a;
 					}, []).filter(c => c.trim());
-				const fetchWav = c => fetch(TTS, {
-					method: 'POST',
-					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({ input: c, voice: 'af_heart' })
-				}).then(r => { if (!r.ok) throw new Error('tts http ' + r.status); return r.blob(); });
+				const get = c => fetch(TTS, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ input: c, voice: 'af_heart' }) })
+					.then(r => { if (!r.ok) throw 0; return r.blob(); });
 				try {
-					let pending = fetchWav(chunks[0]);
+					let pend = get(chunks[0]);
 					for (let i = 0; i < chunks.length; i++) {
-						const blob = await pending;
-						if (my !== session) return;
-						if (i + 1 < chunks.length) pending = fetchWav(chunks[i + 1]);
+						const b = await pend;
+						if (my !== liveSession) return;
+						if (i + 1 < chunks.length) pend = get(chunks[i + 1]);
 						await new Promise((res, rej) => {
-							audio = new Audio(URL.createObjectURL(blob));
-							audio.onended = res;
-							audio.onerror = rej;
-							audio.play().catch(rej);
+							liveAudio = new Audio(URL.createObjectURL(b));
+							liveAudio.onended = res; liveAudio.onerror = rej;
+							liveAudio.play().catch(rej);
 						});
-						if (my !== session) return;
+						if (my !== liveSession) return;
 					}
 				} catch (e) { console.warn('[tts]', e); }
 			}
 
-			// ── capture assistant replies from the UI's own requests ──────────
+			// ── request rewriting + reply capture ─────────────────────────────
+			function rewriteBody(txt) {
+				try {
+					const b = JSON.parse(txt);
+					if (flag(LS_THINK, true)) {
+						b.chat_template_kwargs = { ...(b.chat_template_kwargs || {}), enable_thinking: true };
+						if (b.thinking_budget_tokens === 0) delete b.thinking_budget_tokens;
+					}
+					if (flag(LS_T0, false)) b.temperature = 0;
+					return JSON.stringify(b);
+				} catch { return txt; }
+			}
+
 			async function harvest(stream) {
-				const dec = new TextDecoder();
-				const rd = stream.getReader();
+				const dec = new TextDecoder(); const rd = stream.getReader();
 				let buf = '', acc = '';
 				for (;;) {
 					const { done, value } = await rd.read();
 					if (done) break;
 					buf += dec.decode(value, { stream: true });
-					const lines = buf.split('\n');
-					buf = lines.pop();
+					const lines = buf.split('\n'); buf = lines.pop();
 					for (const ln of lines) {
 						if (!ln.startsWith('data: ')) continue;
-						const payload = ln.slice(6).trim();
-						if (payload === '[DONE]') continue;
+						const p = ln.slice(6).trim();
+						if (p === '[DONE]') continue;
 						try {
-							const j = JSON.parse(payload);
+							const j = JSON.parse(p);
 							const c = j.choices && j.choices[0];
 							const d = (c && (c.delta || c.message)) || {};
 							if (d.content) acc += d.content;
@@ -79,53 +101,57 @@
 				}
 				if (acc.trim()) {
 					lastReply = acc;
-					if (auto()) speak(acc);
+					if (flag(LS_AUTO, false)) speakLive(acc);
+					setTimeout(ensurePlayers, 800);
 				}
 			}
 
 			const orig = window.fetch;
 			window.fetch = function (input, init) {
 				const url = typeof input === 'string' ? input : (input && input.url) || '';
-				const p = orig.apply(this, arguments);
-				if (!/\/chat\/completions/.test(url)) return p;
-				return p.then(resp => {
-					try {
-						const ct = resp.headers.get('content-type') || '';
-						if (resp.ok && resp.body && ct.includes('text/event-stream')) {
-							const [a, b] = resp.body.tee();
-							harvest(b);
-							return new Response(a, resp);
-						}
-						if (resp.ok && ct.includes('application/json')) {
-							resp.clone().json().then(j => {
-								const m = j.choices && j.choices[0] && j.choices[0].message;
-								if (m && m.content) { lastReply = m.content; if (auto()) speak(m.content); }
-							}).catch(() => {});
-						}
-					} catch {}
-					return resp;
-				});
+				if (/\/chat\/completions/.test(url)) {
+					if (init && typeof init.body === 'string') init = { ...init, body: rewriteBody(init.body) };
+					const p = orig.call(this, input, init);
+					return p.then(resp => {
+						try {
+							const ct = resp.headers.get('content-type') || '';
+							if (resp.ok && resp.body && ct.includes('text/event-stream')) {
+								const [a, b] = resp.body.tee();
+								harvest(b);
+								return new Response(a, resp);
+							}
+							if (resp.ok && ct.includes('application/json')) {
+								resp.clone().json().then(j => {
+									const m = j.choices && j.choices[0] && j.choices[0].message;
+									if (m && m.content) {
+										lastReply = m.content;
+										if (flag(LS_AUTO, false)) speakLive(m.content);
+										setTimeout(ensurePlayers, 800);
+									}
+								}).catch(() => {});
+							}
+						} catch {}
+						return resp;
+					});
+				}
+				return orig.apply(this, arguments);
 			};
 
-			// ── 16 kHz mono WAV recorder (server's audio decoder wants WAV) ───
-			let rec = null; // {ctx, node, src, samples:[]}
+			// ── WAV recorder (16 kHz mono; server decoder wants WAV) ──────────
+			let rec = null;
 			function encodeWav(samples, rate) {
-				const n = samples.length;
-				const buf = new ArrayBuffer(44 + n * 2);
-				const v = new DataView(buf);
+				const n = samples.length, buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
 				const ws = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
-				ws(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); ws(8, 'WAVE');
-				ws(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true);
-				v.setUint16(22, 1, true); v.setUint32(24, rate, true);
-				v.setUint32(28, rate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
-				ws(36, 'data'); v.setUint32(40, n * 2, true);
+				ws(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); ws(8, 'WAVE'); ws(12, 'fmt ');
+				v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+				v.setUint32(24, rate, true); v.setUint32(28, rate * 2, true); v.setUint16(32, 2, true);
+				v.setUint16(34, 16, true); ws(36, 'data'); v.setUint32(40, n * 2, true);
 				for (let i = 0; i < n; i++) {
 					const s = Math.max(-1, Math.min(1, samples[i]));
 					v.setInt16(44 + i * 2, s < 0 ? s * 32768 : s * 32767, true);
 				}
 				return new Blob([buf], { type: 'audio/wav' });
 			}
-
 			async function startRec() {
 				const media = await navigator.mediaDevices.getUserMedia({ audio: true });
 				const ctx = new AudioContext({ sampleRate: 16000 });
@@ -136,100 +162,155 @@
 				src.connect(node); node.connect(ctx.destination);
 				rec = { ctx, node, src, media, samples };
 			}
-
 			async function stopRec() {
 				const r = rec; rec = null;
 				r.node.disconnect(); r.src.disconnect();
 				r.media.getTracks().forEach(t => t.stop());
 				await r.ctx.close();
 				const total = r.samples.reduce((a, c) => a + c.length, 0);
-				const flat = new Float32Array(total);
-				let o = 0;
+				const flat = new Float32Array(total); let o = 0;
 				for (const c of r.samples) { flat.set(c, o); o += c.length; }
 				return encodeWav(flat, 16000);
 			}
-
 			function attachToUi(blob) {
 				const inp = document.querySelector('input[type="file"]');
-				if (!inp) { console.warn('[mic] no file input found'); return; }
-				const f = new File([blob], 'recording-' + Date.now() + '.wav', { type: 'audio/wav' });
+				if (!inp) return;
 				const dt = new DataTransfer();
-				dt.items.add(f);
+				dt.items.add(new File([blob], 'recording-' + Date.now() + '.wav', { type: 'audio/wav' }));
 				inp.files = dt.files;
 				inp.dispatchEvent(new Event('change', { bubbles: true }));
 			}
 
-			// ── composer buttons, left of Send ─────────────────────────────────
+			// ── composer buttons ──────────────────────────────────────────────
 			function findSend() {
-				for (const form of document.querySelectorAll('form')) {
-					if (!form.querySelector('textarea')) continue;
-					const btn = form.querySelector('button[type="submit"]');
-					if (btn) return btn;
+				for (const f of document.querySelectorAll('form')) {
+					if (!f.querySelector('textarea')) continue;
+					const b = f.querySelector('button[type="submit"]');
+					if (b) return b;
 				}
 				return null;
+			}
+
+			const style = document.createElement('style');
+			style.textContent =
+				'@keyframes g4vpulse{0%,100%{background:#b71c1c}50%{background:#e53935}}' +
+				'.g4v-rec{animation:g4vpulse 1.2s infinite;color:#fff !important}' +
+				'.g4v-player{display:flex;align-items:center;gap:6px;margin-top:4px;opacity:.75;font:11px system-ui}' +
+				'.g4v-player:hover{opacity:1}' +
+				'.g4v-player button{width:22px;height:22px;border-radius:50%;border:1px solid #555;background:#1b1f20;color:#eee;cursor:pointer;font-size:10px;line-height:1}' +
+				'.g4v-player input[type=range]{width:130px;height:3px;accent-color:#4caf50}' +
+				'.g4v-player .g4v-time{color:#888;min-width:60px}';
+			document.documentElement.appendChild(style);
+
+			function mkBadge(on) {
+				const b = document.createElement('span');
+				b.textContent = '✓';
+				b.style.cssText = 'position:absolute;top:-4px;right:-4px;font-size:11px;background:#2e7d32;' +
+					'color:#fff;border-radius:50%;width:15px;height:15px;line-height:15px;text-align:center;pointer-events:none';
+				b.style.display = on ? 'block' : 'none';
+				return b;
 			}
 
 			function ensureButtons() {
 				const send = findSend();
 				if (!send || send.parentElement.querySelector('.g4v-btn')) return;
-
-				const mk = (emoji, title) => {
+				const mk = (label, title) => {
 					const b = document.createElement('button');
 					b.type = 'button';
-					b.className = send.className;                 // inherit UI theme
+					b.className = send.className;
 					b.classList.add('g4v-btn');
 					b.title = title;
 					b.style.position = 'relative';
-					b.textContent = emoji;
+					b.textContent = label;
 					return b;
 				};
 
-				const spk = mk('🔊', 'Auto-speak replies (✓ = on) · shift-click: replay last reply');
-				const badge = document.createElement('span');
-				badge.textContent = '✓';
-				badge.style.cssText = 'position:absolute;top:-4px;right:-4px;font-size:11px;' +
-					'background:#2e7d32;color:#fff;border-radius:50%;width:15px;height:15px;' +
-					'line-height:15px;text-align:center;pointer-events:none';
-				spk.appendChild(badge);
-				const paint = () => badge.style.display = auto() ? 'block' : 'none';
-				paint();
+				const spk = mk('🔊', 'Auto-speak replies (✓ = on) · shift-click: replay last');
+				const spkBadge = mkBadge(flag(LS_AUTO, false)); spk.appendChild(spkBadge);
 				spk.onclick = e => {
-					if (e.shiftKey) { if (lastReply) speak(lastReply); return; }
-					localStorage.setItem(LS, auto() ? '0' : '1');
-					if (!auto()) stop();
-					paint();
+					if (e.shiftKey) { if (lastReply) speakLive(lastReply); return; }
+					setFlag(LS_AUTO, !flag(LS_AUTO, false));
+					if (!flag(LS_AUTO, false)) stopLive();
+					spkBadge.style.display = flag(LS_AUTO, false) ? 'block' : 'none';
 				};
 
-				const mic = mk('🎙', 'Record audio message (click to start/stop, attaches as WAV)');
+				const mic = mk('🎙', 'Record audio message (red = recording; click again to stop & attach)');
 				mic.onclick = async () => {
 					try {
-						if (!rec) {
-							await startRec();
-							mic.textContent = '⏺';
-							mic.style.color = '#e53935';
-						} else {
-							mic.textContent = '🎙';
-							mic.style.color = '';
-							attachToUi(await stopRec());
-						}
-					} catch (e) {
-						console.warn('[mic]', e);
-						mic.textContent = '🎙';
-						mic.style.color = '';
-						rec = null;
-					}
+						if (!rec) { await startRec(); mic.textContent = '⏺'; mic.classList.add('g4v-rec'); }
+						else { mic.textContent = '🎙'; mic.classList.remove('g4v-rec'); attachToUi(await stopRec()); }
+					} catch (e) { console.warn('[mic]', e); mic.textContent = '🎙'; mic.classList.remove('g4v-rec'); rec = null; }
 				};
 
-				send.parentElement.insertBefore(spk, send);   // [🔊][🎙][Send]
+				const t0 = mk('0°', 'Temperature 0 (deterministic + fastest MTP speedup) · ✓ = on');
+				const t0Badge = mkBadge(flag(LS_T0, false)); t0.appendChild(t0Badge);
+				t0.onclick = () => {
+					setFlag(LS_T0, !flag(LS_T0, false));
+					t0Badge.style.display = flag(LS_T0, false) ? 'block' : 'none';
+				};
+
+				const th = mk('💭', 'Reason on every message (fixes thinking stopping after turn 1) · ✓ = on');
+				const thBadge = mkBadge(flag(LS_THINK, true)); th.appendChild(thBadge);
+				th.onclick = () => {
+					setFlag(LS_THINK, !flag(LS_THINK, true));
+					thBadge.style.display = flag(LS_THINK, true) ? 'block' : 'none';
+				};
+
+				send.parentElement.insertBefore(spk, send);   // [🔊][🎙][0°][💭][Send]
 				send.parentElement.insertBefore(mic, send);
+				send.parentElement.insertBefore(t0, send);
+				send.parentElement.insertBefore(th, send);
+			}
+
+			// ── mini player under each assistant message ──────────────────────
+			const fmt = s => isFinite(s) ? Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0') : '–:––';
+
+			function buildPlayer(msgEl) {
+				const bar = document.createElement('div');
+				bar.className = 'g4v-player';
+				const btn = document.createElement('button'); btn.textContent = '▶';
+				const rng = document.createElement('input'); rng.type = 'range'; rng.min = 0; rng.max = 1000; rng.value = 0;
+				const tm = document.createElement('span'); tm.className = 'g4v-time'; tm.textContent = '–:–– / –:––';
+				bar.append(btn, rng, tm);
+				let audio = null, loading = false;
+				const text = () => sanitize(msgEl.textContent || '');
+				btn.onclick = async () => {
+					if (audio) { audio.paused ? audio.play() : audio.pause(); return; }
+					if (loading) return;
+					loading = true; btn.textContent = '…';
+					try {
+						const r = await fetch(TTS, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+							body: JSON.stringify({ input: text().slice(0, 6000), voice: 'af_heart' }) });
+						if (!r.ok) throw 0;
+						audio = new Audio(URL.createObjectURL(await r.blob()));
+						audio.ontimeupdate = () => {
+							if (audio.duration) rng.value = Math.round(1000 * audio.currentTime / audio.duration);
+							tm.textContent = fmt(audio.currentTime) + ' / ' + fmt(audio.duration);
+						};
+						audio.onplay = () => btn.textContent = '⏸';
+						audio.onpause = () => btn.textContent = '▶';
+						audio.onended = () => { btn.textContent = '▶'; rng.value = 0; };
+						audio.play();
+					} catch (e) { console.warn('[player]', e); btn.textContent = '▶'; audio = null; }
+					loading = false;
+				};
+				rng.oninput = () => { if (audio && audio.duration) audio.currentTime = audio.duration * rng.value / 1000; };
+				return bar;
+			}
+
+			function ensurePlayers() {
+				for (const msg of document.querySelectorAll('[aria-label="Assistant message with actions"]')) {
+					if (msg.querySelector('.g4v-player')) continue;
+					msg.appendChild(buildPlayer(msg));
+				}
 			}
 
 			let raf = 0;
 			new MutationObserver(() => {
 				cancelAnimationFrame(raf);
-				raf = requestAnimationFrame(ensureButtons);
+				raf = requestAnimationFrame(() => { ensureButtons(); ensurePlayers(); });
 			}).observe(document.documentElement, { childList: true, subtree: true });
-			addEventListener('DOMContentLoaded', ensureButtons);
+			addEventListener('DOMContentLoaded', () => { ensureButtons(); ensurePlayers(); });
 		})();
 		</script>
 	</body>
