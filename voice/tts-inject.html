@@ -1,29 +1,34 @@
 		<script>
-		// ── gemma4 voice+controls v3 (Kokoro sidecar via /tts, CPU, 0 VRAM) ─────
-		// Composer buttons left of Send: 🔊 auto-speak (✓ badge) · 🎙 mic (red
-		// while recording) · 0° temperature-zero toggle · 💭 think-every-turn
-		// toggle (fixes the UI freezing enable_thinking off after turn 1).
-		// Under every assistant message: a mini audio player (play/pause +
-		// seekable timeline) that synthesizes the message once and caches it.
+		// ── gemma4 voice+controls v4 ─────────────────────────────────────────
+		// ONE playback engine, ONE trigger: the per-message player. The old
+		// composer auto-speak is gone — it was a second, independent Audio
+		// object reading captured content while the player read the DOM (which
+		// includes the rendered reasoning block): two overlapping voices.
+		//
+		// Trigger chain (sequential, explicit):
+		//   fetch tee → capture content-only deltas per message element
+		//   → user clicks ▶ on a message
+		//   → stopAll() kills any other playback
+		//   → golden-ratio chunker: first cut ≈120 chars at a sentence
+		//     boundary (≈1 s to first audio, even mid-generation), each next
+		//     chunk ×1.618 up to 1400 chars; chunk N+1 synthesizes while N
+		//     plays; if the stream is still running the chunker waits for
+		//     more text
+		//   → when the stream ends and all chunks are played, the chunk WAVs
+		//     are merged into one blob → the timeline becomes fully seekable.
+		//   ⏸ pauses (chunker gates on it), ⏹ hard-stops and resets.
+		// Composer keeps: 🎙 mic (red pulse while recording) · 0° · 💭.
 		(() => {
 			const TTS = '/tts/v1/audio/speech';
-			const LS_AUTO = 'gemma-tts-auto';
 			const LS_T0 = 'gemma-temp0';
 			const LS_THINK = 'gemma-think-always';
-			let lastReply = '';
-			let liveAudio = null;
-			let liveSession = 0;
+			const PHI = 1.618;
+			const CHUNK0 = 120, CHUNK_MAX = 1400;
 
-			const flag = (k, dflt) => {
-				const v = localStorage.getItem(k);
-				return v === null ? dflt : v === '1';
-			};
+			const flag = (k, d) => { const v = localStorage.getItem(k); return v === null ? d : v === '1'; };
 			const setFlag = (k, v) => localStorage.setItem(k, v ? '1' : '0');
-
-			// align the UI's own default so NEW conversations think by default
-			if (localStorage.getItem('LlamaUi.thinkingEnabledDefault') === null) {
+			if (localStorage.getItem('LlamaUi.thinkingEnabledDefault') === null)
 				localStorage.setItem('LlamaUi.thinkingEnabledDefault', 'true');
-			}
 
 			const sanitize = t => t
 				.replace(/```[\s\S]*?```|`[^`]*`/g, ' ')
@@ -32,56 +37,21 @@
 				.replace(/[*_#>|~]+/g, ' ')
 				.replace(/\s+/g, ' ').trim();
 
-			function stopLive() {
-				liveSession++;
-				if (liveAudio) { try { liveAudio.pause(); } catch {} liveAudio = null; }
-			}
+			// ── content capture (content-only; reasoning deltas are ignored) ──
+			const capture = new WeakMap();   // msgEl -> {text, done}
+			const fullWav = new WeakMap();   // msgEl -> merged Blob
+			let live = null;                 // {el, text, done, notify}
 
-			// streaming sentence-pipeline used by auto-speak / composer button
-			async function speakLive(text) {
-				stopLive();
-				const my = ++liveSession;
-				const chunks = (sanitize(text).match(/[^.!?]+[.!?]*\s*/g) || [text])
-					.reduce((a, s) => {
-						const l = a[a.length - 1];
-						if (l && l.length + s.length < 300) a[a.length - 1] += s; else a.push(s);
-						return a;
-					}, []).filter(c => c.trim());
-				const get = c => fetch(TTS, { method: 'POST', headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({ input: c, voice: 'af_heart' }) })
-					.then(r => { if (!r.ok) throw 0; return r.blob(); });
-				try {
-					let pend = get(chunks[0]);
-					for (let i = 0; i < chunks.length; i++) {
-						const b = await pend;
-						if (my !== liveSession) return;
-						if (i + 1 < chunks.length) pend = get(chunks[i + 1]);
-						await new Promise((res, rej) => {
-							liveAudio = new Audio(URL.createObjectURL(b));
-							liveAudio.onended = res; liveAudio.onerror = rej;
-							liveAudio.play().catch(rej);
-						});
-						if (my !== liveSession) return;
-					}
-				} catch (e) { console.warn('[tts]', e); }
-			}
-
-			// ── request rewriting + reply capture ─────────────────────────────
-			function rewriteBody(txt) {
-				try {
-					const b = JSON.parse(txt);
-					if (flag(LS_THINK, true)) {
-						b.chat_template_kwargs = { ...(b.chat_template_kwargs || {}), enable_thinking: true };
-						if (b.thinking_budget_tokens === 0) delete b.thinking_budget_tokens;
-					}
-					if (flag(LS_T0, false)) b.temperature = 0;
-					return JSON.stringify(b);
-				} catch { return txt; }
-			}
+			const lastMsgEl = () => {
+				const all = document.querySelectorAll('[aria-label="Assistant message with actions"]');
+				return all.length ? all[all.length - 1] : null;
+			};
 
 			async function harvest(stream) {
+				const cap = { el: null, text: '', done: false, notify: null };
+				live = cap;
 				const dec = new TextDecoder(); const rd = stream.getReader();
-				let buf = '', acc = '';
+				let buf = '';
 				for (;;) {
 					const { done, value } = await rd.read();
 					if (done) break;
@@ -95,49 +65,227 @@
 							const j = JSON.parse(p);
 							const c = j.choices && j.choices[0];
 							const d = (c && (c.delta || c.message)) || {};
-							if (d.content) acc += d.content;
+							if (d.content) {
+								cap.text += d.content;
+								if (!cap.el) {
+									const el = lastMsgEl();
+									if (el) { cap.el = el; capture.set(el, cap); }
+								}
+								if (cap.notify) cap.notify();
+							}
 						} catch {}
 					}
 				}
-				if (acc.trim()) {
-					lastReply = acc;
-					if (flag(LS_AUTO, false)) speakLive(acc);
-					setTimeout(ensurePlayers, 800);
+				cap.done = true;
+				if (!cap.el) {
+					setTimeout(() => { const el = lastMsgEl(); if (el) { cap.el = el; capture.set(el, cap); } }, 400);
 				}
+				if (cap.notify) cap.notify();
+				if (live === cap) setTimeout(() => { if (live === cap) live = null; }, 500);
+				setTimeout(ensurePlayers, 600);
+			}
+
+			// ── request rewriting (0° and 💭 toggles) ─────────────────────────
+			function rewriteBody(txt) {
+				try {
+					const b = JSON.parse(txt);
+					if (flag(LS_THINK, true)) {
+						b.chat_template_kwargs = { ...(b.chat_template_kwargs || {}), enable_thinking: true };
+						if (b.thinking_budget_tokens === 0) delete b.thinking_budget_tokens;
+					}
+					if (flag(LS_T0, false)) b.temperature = 0;
+					return JSON.stringify(b);
+				} catch { return txt; }
 			}
 
 			const orig = window.fetch;
 			window.fetch = function (input, init) {
 				const url = typeof input === 'string' ? input : (input && input.url) || '';
-				if (/\/chat\/completions/.test(url)) {
-					if (init && typeof init.body === 'string') init = { ...init, body: rewriteBody(init.body) };
-					const p = orig.call(this, input, init);
-					return p.then(resp => {
-						try {
-							const ct = resp.headers.get('content-type') || '';
-							if (resp.ok && resp.body && ct.includes('text/event-stream')) {
-								const [a, b] = resp.body.tee();
-								harvest(b);
-								return new Response(a, resp);
-							}
-							if (resp.ok && ct.includes('application/json')) {
-								resp.clone().json().then(j => {
-									const m = j.choices && j.choices[0] && j.choices[0].message;
-									if (m && m.content) {
-										lastReply = m.content;
-										if (flag(LS_AUTO, false)) speakLive(m.content);
-										setTimeout(ensurePlayers, 800);
-									}
-								}).catch(() => {});
-							}
-						} catch {}
-						return resp;
-					});
-				}
-				return orig.apply(this, arguments);
+				if (!/\/chat\/completions/.test(url)) return orig.apply(this, arguments);
+				if (init && typeof init.body === 'string') init = { ...init, body: rewriteBody(init.body) };
+				return orig.call(this, input, init).then(resp => {
+					try {
+						const ct = resp.headers.get('content-type') || '';
+						if (resp.ok && resp.body && ct.includes('text/event-stream')) {
+							const [a, b] = resp.body.tee();
+							harvest(b);
+							return new Response(a, resp);
+						}
+						if (resp.ok && ct.includes('application/json')) {
+							resp.clone().json().then(j => {
+								const m = j.choices && j.choices[0] && j.choices[0].message;
+								if (m && m.content) {
+									const el = lastMsgEl();
+									if (el) capture.set(el, { el, text: m.content, done: true, notify: null });
+									setTimeout(ensurePlayers, 600);
+								}
+							}).catch(() => {});
+						}
+					} catch {}
+					return resp;
+				});
 			};
 
-			// ── WAV recorder (16 kHz mono; server decoder wants WAV) ──────────
+			// ── single global playback engine ─────────────────────────────────
+			let engine = null; // {stop(), pauseToggle(), bar}
+			function stopAll() { if (engine) { const e = engine; engine = null; e.stop(); } }
+
+			const synth = text => fetch(TTS, {
+				method: 'POST', headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ input: text, voice: 'af_heart' })
+			}).then(r => { if (!r.ok) throw new Error('tts ' + r.status); return r.blob(); });
+
+			function mergeWavs(bufs) {
+				// all sidecar WAVs: 24 kHz mono s16, 44-byte header
+				const datas = bufs.map(b => new Uint8Array(b).subarray(44));
+				const n = datas.reduce((a, d) => a + d.length, 0);
+				const out = new Uint8Array(44 + n);
+				out.set(new Uint8Array(bufs[0]).subarray(0, 44));
+				const v = new DataView(out.buffer);
+				v.setUint32(4, 36 + n, true); v.setUint32(40, n, true);
+				let o = 44;
+				for (const d of datas) { out.set(d, o); o += d.length; }
+				return new Blob([out], { type: 'audio/wav' });
+			}
+
+			// cut a chunk of >= target chars at a sentence boundary (or all of it)
+			function cutChunk(text, from, target, force) {
+				const rest = text.slice(from);
+				if (!rest.trim()) return null;
+				if (rest.length < target && !force) return null;
+				const window = rest.slice(0, Math.max(target * 2, target + 200));
+				let cut = -1;
+				const re = /[.!?][)"']?\s/g; let m;
+				while ((m = re.exec(window))) { if (m.index + 2 >= target || cut === -1) cut = m.index + m[0].length; if (m.index + 2 >= target) break; }
+				if (cut === -1 || cut < target * 0.4) cut = force ? rest.length : (rest.length >= target * 2 ? target : -1);
+				if (cut === -1) return null;
+				return { text: rest.slice(0, cut), next: from + cut };
+			}
+
+			const fmt = s => isFinite(s) && s !== null ? Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0') : '–:––';
+
+			function buildPlayer(msgEl) {
+				const bar = document.createElement('div'); bar.className = 'g4v-player';
+				const play = document.createElement('button'); play.textContent = '▶'; play.title = 'Read aloud (starts within ~1s, even while streaming)';
+				const stopB = document.createElement('button'); stopB.textContent = '⏹'; stopB.title = 'Stop';
+				const rng = document.createElement('input'); rng.type = 'range'; rng.min = 0; rng.max = 1000; rng.value = 0;
+				const tm = document.createElement('span'); tm.className = 'g4v-time'; tm.textContent = '–:–– / –:––';
+				bar.append(play, stopB, rng, tm);
+
+				const setIdle = () => { play.textContent = '▶'; play.classList.remove('g4v-spin'); rng.classList.remove('g4v-live'); rng.value = 0; tm.textContent = '–:–– / –:––'; };
+
+				function playCached(blob) {
+					const audio = new Audio(URL.createObjectURL(blob));
+					let stopped = false;
+					engine = {
+						bar,
+						stop() { stopped = true; try { audio.pause(); } catch {} setIdle(); },
+						pauseToggle() { audio.paused ? audio.play() : audio.pause(); }
+					};
+					audio.ontimeupdate = () => {
+						if (stopped) return;
+						if (audio.duration) rng.value = Math.round(1000 * audio.currentTime / audio.duration);
+						tm.textContent = fmt(audio.currentTime) + ' / ' + fmt(audio.duration);
+					};
+					audio.onplay = () => { if (!stopped) play.textContent = '⏸'; };
+					audio.onpause = () => { if (!stopped && !audio.ended) play.textContent = '▶'; };
+					audio.onended = () => { if (engine && engine.bar === bar) engine = null; setIdle(); };
+					rng.oninput = () => { if (audio.duration) audio.currentTime = audio.duration * rng.value / 1000; };
+					audio.play().catch(() => { setIdle(); if (engine && engine.bar === bar) engine = null; });
+				}
+
+				async function playStreaming(cap) {
+					let aborted = false, paused = false, audio = null;
+					const played = [];        // arrayBuffers of finished chunks
+					let elapsedBase = 0;      // seconds of audio fully played
+					play.textContent = '⟳'; play.classList.add('g4v-spin');
+					rng.classList.add('g4v-live');
+					engine = {
+						bar,
+						stop() { aborted = true; if (audio) try { audio.pause(); } catch {} setIdle(); },
+						pauseToggle() {
+							paused = !paused;
+							if (audio) { paused ? audio.pause() : audio.play(); }
+							play.textContent = paused ? '▶' : (audio ? '⏸' : '⟳');
+						}
+					};
+					const waitText = () => new Promise(res => { cap.notify = res; setTimeout(res, 1500); });
+					let from = 0, target = CHUNK0, pending = null;
+					const nextBlob = async () => {
+						for (;;) {
+							if (aborted) return null;
+							const c = cutChunk(cap.text, from, target, cap.done);
+							if (c) {
+								from = c.next; target = Math.min(Math.round(target * PHI), CHUNK_MAX);
+								const s = sanitize(c.text);
+								if (!s) continue;
+								return synth(s).then(b => b.arrayBuffer());
+							}
+							if (cap.done) return null;
+							await waitText();
+						}
+					};
+					try {
+						pending = nextBlob();
+						for (;;) {
+							const bufP = pending; if (!bufP) break;
+							const buf = await bufP;
+							if (aborted || !buf) break;
+							pending = nextBlob();
+							played.push(buf);
+							while (paused && !aborted) await new Promise(r => setTimeout(r, 150));
+							if (aborted) break;
+							await new Promise((res, rej) => {
+								audio = new Audio(URL.createObjectURL(new Blob([buf], { type: 'audio/wav' })));
+								audio.onended = res; audio.onerror = rej;
+								audio.onplay = () => { if (!aborted && !paused) play.textContent = '⏸'; };
+								const dur = () => {
+									if (aborted) return;
+									tm.textContent = fmt(elapsedBase + (audio.currentTime || 0)) + (cap.done && !pending ? '' : ' / …');
+								};
+								audio.ontimeupdate = dur;
+								if (paused) {
+									const w = setInterval(() => {
+										if (aborted) { clearInterval(w); res(); }
+										else if (!paused) { clearInterval(w); audio.play().catch(rej); }
+									}, 150);
+								} else audio.play().catch(rej);
+							});
+							elapsedBase += (played[played.length - 1].byteLength - 44) / 2 / 24000;
+							if (aborted) break;
+						}
+					} catch (e) { console.warn('[player]', e); }
+					if (!aborted) {
+						// merge for instant seekable replay
+						if (played.length) fullWav.set(msgEl, mergeWavs(played));
+						if (engine && engine.bar === bar) engine = null;
+						setIdle();
+						const b = fullWav.get(msgEl);
+						if (b) { const d = (b.size - 44) / 2 / 24000; tm.textContent = '0:00 / ' + fmt(d); }
+					}
+				}
+
+				play.onclick = () => {
+					if (engine && engine.bar === bar) { engine.pauseToggle(); return; }
+					stopAll();
+					const cached = fullWav.get(msgEl);
+					if (cached) { playCached(cached); return; }
+					const cap = capture.get(msgEl) || (live && live.el === msgEl ? live : null)
+						|| { el: msgEl, text: sanitize(msgEl.textContent || ''), done: true, notify: null };
+					playStreaming(cap);
+				};
+				stopB.onclick = () => { if (engine && engine.bar === bar) stopAll(); else setIdle(); };
+				return bar;
+			}
+
+			function ensurePlayers() {
+				for (const msg of document.querySelectorAll('[aria-label="Assistant message with actions"]')) {
+					if (msg.querySelector('.g4v-player')) continue;
+					msg.appendChild(buildPlayer(msg));
+				}
+			}
+
+			// ── recorder + composer buttons (auto-speak removed) ──────────────
 			let rec = null;
 			function encodeWav(samples, rate) {
 				const n = samples.length, buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
@@ -146,10 +294,7 @@
 				v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
 				v.setUint32(24, rate, true); v.setUint32(28, rate * 2, true); v.setUint16(32, 2, true);
 				v.setUint16(34, 16, true); ws(36, 'data'); v.setUint32(40, n * 2, true);
-				for (let i = 0; i < n; i++) {
-					const s = Math.max(-1, Math.min(1, samples[i]));
-					v.setInt16(44 + i * 2, s < 0 ? s * 32768 : s * 32767, true);
-				}
+				for (let i = 0; i < n; i++) { const s = Math.max(-1, Math.min(1, samples[i])); v.setInt16(44 + i * 2, s < 0 ? s * 32768 : s * 32767, true); }
 				return new Blob([buf], { type: 'audio/wav' });
 			}
 			async function startRec() {
@@ -181,7 +326,21 @@
 				inp.dispatchEvent(new Event('change', { bubbles: true }));
 			}
 
-			// ── composer buttons ──────────────────────────────────────────────
+			const style = document.createElement('style');
+			style.textContent =
+				'@keyframes g4vpulse{0%,100%{background:#b71c1c}50%{background:#e53935}}' +
+				'.g4v-rec{animation:g4vpulse 1.2s infinite;color:#fff !important}' +
+				'@keyframes g4vspin{to{transform:rotate(360deg)}}' +
+				'.g4v-spin{animation:g4vspin 1s linear infinite}' +
+				'@keyframes g4vslide{to{background-position:26px 0}}' +
+				'.g4v-live{background:repeating-linear-gradient(90deg,#2e7d32 0 8px,#1b5e20 8px 16px);background-size:26px 100%;animation:g4vslide .8s linear infinite;pointer-events:none;border-radius:3px}' +
+				'.g4v-player{display:flex;align-items:center;gap:6px;margin-top:4px;opacity:.75;font:11px system-ui}' +
+				'.g4v-player:hover{opacity:1}' +
+				'.g4v-player button{width:22px;height:22px;border-radius:50%;border:1px solid #555;background:#1b1f20;color:#eee;cursor:pointer;font-size:10px;line-height:1;display:inline-flex;align-items:center;justify-content:center}' +
+				'.g4v-player input[type=range]{width:130px;height:4px;accent-color:#4caf50}' +
+				'.g4v-player .g4v-time{color:#888;min-width:70px}';
+			document.documentElement.appendChild(style);
+
 			function findSend() {
 				for (const f of document.querySelectorAll('form')) {
 					if (!f.querySelector('textarea')) continue;
@@ -190,50 +349,22 @@
 				}
 				return null;
 			}
-
-			const style = document.createElement('style');
-			style.textContent =
-				'@keyframes g4vpulse{0%,100%{background:#b71c1c}50%{background:#e53935}}' +
-				'.g4v-rec{animation:g4vpulse 1.2s infinite;color:#fff !important}' +
-				'.g4v-player{display:flex;align-items:center;gap:6px;margin-top:4px;opacity:.75;font:11px system-ui}' +
-				'.g4v-player:hover{opacity:1}' +
-				'.g4v-player button{width:22px;height:22px;border-radius:50%;border:1px solid #555;background:#1b1f20;color:#eee;cursor:pointer;font-size:10px;line-height:1}' +
-				'.g4v-player input[type=range]{width:130px;height:3px;accent-color:#4caf50}' +
-				'.g4v-player .g4v-time{color:#888;min-width:60px}';
-			document.documentElement.appendChild(style);
-
 			function mkBadge(on) {
 				const b = document.createElement('span');
 				b.textContent = '✓';
-				b.style.cssText = 'position:absolute;top:-4px;right:-4px;font-size:11px;background:#2e7d32;' +
-					'color:#fff;border-radius:50%;width:15px;height:15px;line-height:15px;text-align:center;pointer-events:none';
+				b.style.cssText = 'position:absolute;top:-4px;right:-4px;font-size:11px;background:#2e7d32;color:#fff;border-radius:50%;width:15px;height:15px;line-height:15px;text-align:center;pointer-events:none';
 				b.style.display = on ? 'block' : 'none';
 				return b;
 			}
-
 			function ensureButtons() {
 				const send = findSend();
 				if (!send || send.parentElement.querySelector('.g4v-btn')) return;
 				const mk = (label, title) => {
 					const b = document.createElement('button');
-					b.type = 'button';
-					b.className = send.className;
-					b.classList.add('g4v-btn');
-					b.title = title;
-					b.style.position = 'relative';
-					b.textContent = label;
+					b.type = 'button'; b.className = send.className; b.classList.add('g4v-btn');
+					b.title = title; b.style.position = 'relative'; b.textContent = label;
 					return b;
 				};
-
-				const spk = mk('🔊', 'Auto-speak replies (✓ = on) · shift-click: replay last');
-				const spkBadge = mkBadge(flag(LS_AUTO, false)); spk.appendChild(spkBadge);
-				spk.onclick = e => {
-					if (e.shiftKey) { if (lastReply) speakLive(lastReply); return; }
-					setFlag(LS_AUTO, !flag(LS_AUTO, false));
-					if (!flag(LS_AUTO, false)) stopLive();
-					spkBadge.style.display = flag(LS_AUTO, false) ? 'block' : 'none';
-				};
-
 				const mic = mk('🎙', 'Record audio message (red = recording; click again to stop & attach)');
 				mic.onclick = async () => {
 					try {
@@ -241,68 +372,15 @@
 						else { mic.textContent = '🎙'; mic.classList.remove('g4v-rec'); attachToUi(await stopRec()); }
 					} catch (e) { console.warn('[mic]', e); mic.textContent = '🎙'; mic.classList.remove('g4v-rec'); rec = null; }
 				};
-
-				const t0 = mk('0°', 'Temperature 0 (deterministic + fastest MTP speedup) · ✓ = on');
-				const t0Badge = mkBadge(flag(LS_T0, false)); t0.appendChild(t0Badge);
-				t0.onclick = () => {
-					setFlag(LS_T0, !flag(LS_T0, false));
-					t0Badge.style.display = flag(LS_T0, false) ? 'block' : 'none';
-				};
-
-				const th = mk('💭', 'Reason on every message (fixes thinking stopping after turn 1) · ✓ = on');
-				const thBadge = mkBadge(flag(LS_THINK, true)); th.appendChild(thBadge);
-				th.onclick = () => {
-					setFlag(LS_THINK, !flag(LS_THINK, true));
-					thBadge.style.display = flag(LS_THINK, true) ? 'block' : 'none';
-				};
-
-				send.parentElement.insertBefore(spk, send);   // [🔊][🎙][0°][💭][Send]
-				send.parentElement.insertBefore(mic, send);
+				const t0 = mk('0°', 'Temperature 0 (deterministic + fastest) · ✓ = on');
+				const t0B = mkBadge(flag(LS_T0, false)); t0.appendChild(t0B);
+				t0.onclick = () => { setFlag(LS_T0, !flag(LS_T0, false)); t0B.style.display = flag(LS_T0, false) ? 'block' : 'none'; };
+				const th = mk('💭', 'Reason on every message · ✓ = on');
+				const thB = mkBadge(flag(LS_THINK, true)); th.appendChild(thB);
+				th.onclick = () => { setFlag(LS_THINK, !flag(LS_THINK, true)); thB.style.display = flag(LS_THINK, true) ? 'block' : 'none'; };
+				send.parentElement.insertBefore(mic, send);   // [🎙][0°][💭][Send]
 				send.parentElement.insertBefore(t0, send);
 				send.parentElement.insertBefore(th, send);
-			}
-
-			// ── mini player under each assistant message ──────────────────────
-			const fmt = s => isFinite(s) ? Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0') : '–:––';
-
-			function buildPlayer(msgEl) {
-				const bar = document.createElement('div');
-				bar.className = 'g4v-player';
-				const btn = document.createElement('button'); btn.textContent = '▶';
-				const rng = document.createElement('input'); rng.type = 'range'; rng.min = 0; rng.max = 1000; rng.value = 0;
-				const tm = document.createElement('span'); tm.className = 'g4v-time'; tm.textContent = '–:–– / –:––';
-				bar.append(btn, rng, tm);
-				let audio = null, loading = false;
-				const text = () => sanitize(msgEl.textContent || '');
-				btn.onclick = async () => {
-					if (audio) { audio.paused ? audio.play() : audio.pause(); return; }
-					if (loading) return;
-					loading = true; btn.textContent = '…';
-					try {
-						const r = await fetch(TTS, { method: 'POST', headers: { 'Content-Type': 'application/json' },
-							body: JSON.stringify({ input: text().slice(0, 6000), voice: 'af_heart' }) });
-						if (!r.ok) throw 0;
-						audio = new Audio(URL.createObjectURL(await r.blob()));
-						audio.ontimeupdate = () => {
-							if (audio.duration) rng.value = Math.round(1000 * audio.currentTime / audio.duration);
-							tm.textContent = fmt(audio.currentTime) + ' / ' + fmt(audio.duration);
-						};
-						audio.onplay = () => btn.textContent = '⏸';
-						audio.onpause = () => btn.textContent = '▶';
-						audio.onended = () => { btn.textContent = '▶'; rng.value = 0; };
-						audio.play();
-					} catch (e) { console.warn('[player]', e); btn.textContent = '▶'; audio = null; }
-					loading = false;
-				};
-				rng.oninput = () => { if (audio && audio.duration) audio.currentTime = audio.duration * rng.value / 1000; };
-				return bar;
-			}
-
-			function ensurePlayers() {
-				for (const msg of document.querySelectorAll('[aria-label="Assistant message with actions"]')) {
-					if (msg.querySelector('.g4v-player')) continue;
-					msg.appendChild(buildPlayer(msg));
-				}
 			}
 
 			let raf = 0;
