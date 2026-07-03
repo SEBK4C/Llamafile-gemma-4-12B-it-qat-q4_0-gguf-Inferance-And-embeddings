@@ -1,5 +1,5 @@
 		<script>
-		// ── gemma4 voice+controls v7 ─────────────────────────────────────────
+		// ── gemma4 voice+controls v8 ─────────────────────────────────────────
 		// ONE playback engine, ONE trigger: the per-message player. The old
 		// composer auto-speak is gone — it was a second, independent Audio
 		// object reading captured content while the player read the DOM (which
@@ -198,7 +198,7 @@
 				// wrap every word in the message body (skip code, our controls)
 				const walker = document.createTreeWalker(msgEl, NodeFilter.SHOW_TEXT, { acceptNode(n) {
 					const p = n.parentElement;
-					if (!p || p.closest('.g4v-ctl,pre,code,button,textarea')) return NodeFilter.FILTER_REJECT;
+					if (!p || p.closest('.g4v-ctl,pre,code,button,textarea,[data-collapsible-root],.info')) return NodeFilter.FILTER_REJECT;
 					return n.textContent.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
 				}});
 				const nodes = []; let n;
@@ -449,13 +449,17 @@
 
 			function ensurePlayers() {
 				for (const msg of document.querySelectorAll('[aria-label="Assistant message with actions"]')) {
-					if (msg.querySelector('.g4v-ctl')) continue;
-					const ctl = buildControls(msg);
-					// "under the reasoning dropdown, before the answer": if the message
-					// has a collapsible reasoning block, place after it; else at top.
-					const det = msg.querySelector('details');
-					if (det) det.insertAdjacentElement('afterend', ctl);
-					else msg.insertAdjacentElement('afterbegin', ctl);
+					const ctl = msg.querySelector('.g4v-ctl') || buildControls(msg);
+					// keep the controls directly above the ANSWER body (i.e. below the
+					// reasoning dropdown) — reposition as the message DOM fills in
+					const ans = Array.from(msg.querySelectorAll('.agentic-text')).find(e => !e.closest('[data-collapsible-root]'));
+					if (ans) {
+						if (ans.previousElementSibling !== ctl) ans.insertAdjacentElement('beforebegin', ctl);
+					} else {
+						const reas = msg.querySelector('[data-collapsible-root]');
+						if (reas) { if (reas.nextElementSibling !== ctl) reas.insertAdjacentElement('afterend', ctl); }
+						else if (!ctl.isConnected) msg.insertAdjacentElement('afterbegin', ctl);
+					}
 				}
 			}
 
