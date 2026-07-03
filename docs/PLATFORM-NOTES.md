@@ -10,7 +10,7 @@ right on one box doesn't silently break another.
 | Flag / feature | NVIDIA GPU (CUDA) | CPU-only (any arch) | Apple Silicon (Metal) |
 |---|---|---|---|
 | `-fa` (flash attention) | ✅ on (needs DSO with patches 0016/0017, see below) | ⚠️ works, but see MTP assert below | ✅ per fork README |
-| `-ctk/-ctv q8_0` (quantized KV) | ✅ requires FA on | ❌ **segfaults** — use f16 | untested; keep f16 |
+| `-ctk/-ctv q8_0` (quantized KV) | ✅ requires FA on, but **~16% slower decode** than f16 (dequant per attention step) — use only when you need the extra context to fit | ❌ **segfaults** — use f16 | untested; keep f16 |
 | `-sm none` | ✅ single-GPU optimum | ❌ **fails to load**: "invalid value for main_gpu: 0" with zero devices — use `-sm layer` | n/a |
 | `-c 262144` (max context) | ✅ fits 12 GB with q8 KV + `-ub 256` | ✅ RAM permitting (slow) | ❌ 16 GB Metal cap ≈ 12.1 GB working set; use `-c 8192`, drop to 4096 on 12 GB machines |
 | `--spec-draft-n-max` | 4 (CUDA batched verify is cheap) | 2 | 2 (measured M4 optimum) |
@@ -76,9 +76,16 @@ right on one box doesn't silently break another.
   song → correctly "songbird" + plausible-but-wrong species (House Sparrow vs
   European Robin); 1962 F1 V8 → "heavy machine/locomotive" (right category,
   wrong machine). Category-level ID is reliable; species/engine-level is not.
-- Generation speed depends on sampling and context depth: temp 0.2 ≈ 190 tok/s
-  vs temp 1.0 ≈ 154 tok/s (MTP acceptance), and ~60 tok/s at 7–8 K tokens of
-  chat history on the 3080 Ti. Not a bug.
+- Generation speed: **~90-110 tok/s is the honest native decode speed on
+  chat/reasoning** (RTX 3080 Ti). Higher "190 tok/s" numbers come from MTP
+  speculative decoding on *predictable raw text* (acceptance 0.7-0.95); on
+  diverse chat output acceptance falls to ~0.3, where the drafter breaks even
+  (spec-on ≈ spec-off). This is inherent to speculative decoding, not fixable
+  without retraining the drafter head. Two knobs that DO help, both shipped:
+  CUDA graphs (`-DGGML_CUDA_USE_GRAPHS`, +7-10%) and f16 KV instead of q8_0
+  (+16% — see KV row). Browser-measured UI long-gen went 74 → 81 → 92 tok/s
+  across these. Prompt cache pre-encode (`preEncodeConversation`) hides prefill
+  of the next turn behind reading time.
 - UI reasoning: the stock UI freezes `thinkingEnabled` per conversation at
   creation; the injection's 💭 toggle forces `enable_thinking: true` per
   request (and drops `thinking_budget_tokens: 0`). Server-side, reasoning is
