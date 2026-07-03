@@ -250,10 +250,19 @@
 			// Speak sentences fromSent..end, starting mid-sentence at word fromWord.
 			async function playKaraoke(msgEl, btn, k, fromSent, fromWord) {
 				let aborted = false, paused = false, audio = null;
+				// follow-latch: ANY user scroll intent stops auto-follow until the
+				// user returns to the reading (word visible again) or clicks play/word
+				let follow = true;
+				const unfollow = () => { follow = false; };
+				const navEvs = ['wheel', 'touchmove'];
+				for (const ev of navEvs) addEventListener(ev, unfollow, { passive: true });
+				const keyNav = e => { if (['PageUp','PageDown','ArrowUp','ArrowDown','Home','End',' '].includes(e.key)) unfollow(); };
+				addEventListener('keydown', keyNav, { passive: true });
+				const detach = () => { for (const ev of navEvs) removeEventListener(ev, unfollow); removeEventListener('keydown', keyNav); };
 				const setIdle = () => { btn.textContent = '▶'; btn.classList.remove('g4v-spin'); clearHl(k); };
 				engine = {
 					btn,
-					stop() { aborted = true; if (audio) try { audio.pause(); } catch {} setIdle(); },
+					stop() { aborted = true; detach(); if (audio) try { audio.pause(); } catch {} setIdle(); },
 					pauseToggle() {
 						paused = !paused;
 						if (audio) { paused ? audio.pause() : audio.play().catch(() => {}); }
@@ -300,12 +309,10 @@
 								let acc = 0, hi = idxs[idxs.length - 1];
 								for (let j = 0; j < idxs.length; j++) { acc += lens[j]; if (acc / total >= p) { hi = idxs[j]; break; } }
 								for (const i of idxs) k.words[i].span.classList.toggle('g4v-hl', i === hi);
-								// follow the reading ONLY if the user is near it — never yank
-							// the page back when they have scrolled away to read elsewhere
-							const rct = k.words[hi].span.getBoundingClientRect();
-							if (rct.top > -window.innerHeight * 0.5 && rct.bottom < window.innerHeight * 1.5) {
-								k.words[hi].span.scrollIntoView({ block: 'nearest' });
-							}
+								const rct = k.words[hi].span.getBoundingClientRect();
+							const visible = rct.top >= 0 && rct.bottom <= window.innerHeight;
+							if (!follow && visible) follow = true;       // user came back: resume
+							if (follow && !visible) k.words[hi].span.scrollIntoView({ block: 'nearest' });
 							};
 							if (paused) {
 								const w = setInterval(() => {
@@ -317,6 +324,7 @@
 					} catch {}
 					for (const i of idxs) k.words[i].span.classList.remove('g4v-hl');
 				}
+				detach();
 				if (!aborted) { if (engine && engine.btn === btn) engine = null; setIdle(); }
 			}
 
