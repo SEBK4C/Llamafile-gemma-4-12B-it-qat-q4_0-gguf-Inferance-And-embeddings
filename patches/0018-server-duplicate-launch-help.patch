@@ -1,0 +1,63 @@
+diff --git a/tools/server/server-http.cpp b/tools/server/server-http.cpp
+index 34a20c9..7ba47ed 100644
+--- a/tools/server/server-http.cpp
++++ b/tools/server/server-http.cpp
+@@ -5,6 +5,12 @@
+ 
+ #include <cpp-httplib/httplib.h>
+ 
++#include <cstdlib>
++#include <unistd.h>
++#ifdef COSMOCC
++#include <cosmo.h>
++#endif
++
+ #include <functional>
+ #include <future>
+ #include <memory>
+@@ -376,6 +382,45 @@ bool server_http_context::start() {
+     }
+ 
+     if (!was_bound) {
++        // A very common failure for less-experienced users is launching the
++        // llamafile twice: the second copy dies here with a cryptic bind
++        // error while a perfectly good server is already running. Probe the
++        // port — if something llama-shaped answers, say so in plain words
++        // and open the existing web UI for them (interactive runs only).
++        if (!is_sock) {
++            std::string probe_host = (hostname == "0.0.0.0" || hostname.empty()) ? "127.0.0.1" : hostname;
++            httplib::Client probe(probe_host, port);
++            probe.set_connection_timeout(2, 0);
++            probe.set_read_timeout(2, 0);
++            auto res = probe.Get("/props");
++            if (res && res->status == 200 && res->body.find("model_path") != std::string::npos) {
++                std::string url = "http://" + probe_host + ":" + std::to_string(port) + "/";
++                fprintf(stderr, "\n"
++                    "+----------------------------------------------------------------------+\n"
++                    "| A Gemma / llamafile server is ALREADY RUNNING on port %-5d          |\n"
++                    "| You probably launched this file twice - that's all, nothing broke.  |\n"
++                    "|                                                                      |\n"
++                    "| Use the running one:   %-45s |\n"
++                    "| Stop the old one:      press Ctrl+C in its terminal, or run         |\n"
++                    "|                        pkill -f gemma4-server                        |\n"
++                    "| Or run a second copy:  add   --port %-5d   to this command         |\n"
++                    "+----------------------------------------------------------------------+\n\n",
++                    port, url.c_str(), port + 1);
++                if (isatty(2) && !getenv("LLAMAFILE_NO_BROWSER")) {
++                    std::string cmd = "xdg-open " + url + " >/dev/null 2>&1";
++#ifdef COSMOCC
++                    if (IsXnu()) cmd = "open " + url;
++                    else if (IsWindows()) cmd = "explorer " + url;
++#elif defined(__APPLE__)
++                    cmd = "open " + url;
++#endif
++                    fprintf(stderr, "Opening the existing web UI in your browser...\n");
++                    if (system(cmd.c_str()) != 0)
++                        fprintf(stderr, "(could not open a browser - visit %s yourself)\n", url.c_str());
++                }
++                return false;
++            }
++        }
+         SRV_ERR("couldn't bind HTTP server socket, hostname: %s, port: %d\n", hostname.c_str(), port);
+         return false;
+     }
