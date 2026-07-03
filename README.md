@@ -12,6 +12,27 @@ one set of weights in memory, one KV cache, one port:
 | `POST /v1/embeddings` | OpenAI-style embeddings (3840-dim, mean-pooled, L2-normalized) |
 | `GET /health`, `POST /tokenize`, … | usual llama-server extras |
 
+## What's new in v0.2.0 — GPU + voice ([full changelog](CHANGELOG.md))
+
+**NVIDIA GPU inference in the packaged file.** The APE now bakes in a
+TinyBLAS CUDA backend (driver-only at runtime) with the upstream fattn fixes
+Gemma 4's 512-dim heads need (patches 0016/0017) and CUDA graphs enabled.
+Measured on an RTX 3080 Ti: 9 → ~200 tok/s raw, ~90–110 tok/s chat. Details
+and the cross-platform compatibility matrix: [docs/PLATFORM-NOTES.md](docs/PLATFORM-NOTES.md).
+
+**Voice, in both directions.** A CPU-only [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M)
+sidecar (`voice/`) gives the web UI karaoke-style read-aloud — every word
+highlights as it's spoken, click any word to jump there, «/» speed controls,
+~0.13 s start via prefetch — and a 🎙 button records WAV audio questions for
+Gemma's audio input.
+
+| | |
+|---|---|
+| ![karaoke read-aloud with word highlighting](docs/screenshots/karaoke-playback.png) | ![recording an audio message](docs/screenshots/mic-recording.png) |
+| Karaoke read-aloud: controls under the reasoning dropdown, spoken word highlighted, reading-speed « » | 🎙 next to Send — red while recording, attaches a WAV to the message |
+| ![composer with mic](docs/screenshots/composer-mic.png) | ![toggles in the + menu](docs/screenshots/plus-menu-toggles.png) |
+| The composer | “0° Temperature zero” and “💭 Reason every turn” live in the + menu |
+
 ## How the dual mode works
 
 llama-server's `--embeddings` flag is documented as *"restrict to only support
@@ -458,6 +479,25 @@ chmod +x gemma4-server.llamafile && ./gemma4-server.llamafile
 If you publish, note the model weights are Apache 2.0 with Google's
 [Gemma 4 license link](https://ai.google.dev/gemma/docs/gemma_4_license) on
 the card — mirror that in your model card.
+
+## Credits
+
+This project stands on excellent open work:
+
+- [mozilla-ai/llamafile](https://github.com/mozilla-ai/llamafile) — the
+  Cosmopolitan single-file packaging and runtime this repo forks.
+- [ggml-org/llama.cpp](https://github.com/ggml-org/llama.cpp) — the inference
+  engine; the Gemma 4 + MTP support (#23398) and the CUDA fattn fixes we
+  ship as patches 0016/0017 (#25148 by Johannes Gäßler, #24945 by
+  fairydreaming).
+- [ggml-org/llama-ui](https://huggingface.co/buckets/ggml-org/llama-ui) — the
+  Svelte web UI embedded in the server (asset tag `b9578`).
+- [hexgrad/Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) — the
+  82M-parameter TTS model behind the read-aloud voice, and
+  [thewh1teagle/kokoro-onnx](https://github.com/thewh1teagle/kokoro-onnx) —
+  the ONNX runtime + packaging that lets it run realtime on CPU.
+- [google/gemma-4-12B-it-qat-q4_0-gguf](https://huggingface.co/google/gemma-4-12B-it-qat-q4_0-gguf)
+  — the model itself.
 
 ## Caveats
 
