@@ -1,5 +1,5 @@
 		<script>
-		// ── gemma4 voice+controls v4 ─────────────────────────────────────────
+		// ── gemma4 voice+controls v5 ─────────────────────────────────────────
 		// ONE playback engine, ONE trigger: the per-message player. The old
 		// composer auto-speak is gone — it was a second, independent Audio
 		// object reading captured content while the player read the DOM (which
@@ -23,7 +23,7 @@
 			const LS_T0 = 'gemma-temp0';
 			const LS_THINK = 'gemma-think-always';
 			const PHI = 1.618;
-			const CHUNK0 = 120, CHUNK_MAX = 1400;
+			const CHUNK0 = 55, CHUNK_MAX = 1400;   // small first chunk ⇒ ~0.5s synth
 
 			const flag = (k, d) => { const v = localStorage.getItem(k); return v === null ? d : v === '1'; };
 			const setFlag = (k, v) => localStorage.setItem(k, v ? '1' : '0');
@@ -40,7 +40,35 @@
 			// ── content capture (content-only; reasoning deltas are ignored) ──
 			const capture = new WeakMap();   // msgEl -> {text, done}
 			const fullWav = new WeakMap();   // msgEl -> merged Blob
+			const firstBlob = new WeakMap(); // msgEl -> prefetched first-chunk WAV Blob (instant ▶)
 			let live = null;                 // {el, text, done, notify}
+
+			// cut the first speakable chunk (>= target chars, sentence boundary if possible)
+			function firstChunkText(text, target) {
+				const s = text.slice(0, Math.max(target * 3, 200));
+				const re = /[.!?][)"']?\s/g, ends = [];
+				let x; while ((x = re.exec(s))) ends.push(x.index + x[0].length);
+				let cut = ends.find(i => i >= target);
+				if (cut === undefined) cut = ends.length ? ends[ends.length - 1] : Math.min(s.length, target * 2);
+				return text.slice(0, cut).trim();
+			}
+			const synthFirst = txt => fetch(TTS, {
+				method: 'POST', headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ input: txt, voice: 'af_heart' })
+			}).then(r => r.ok ? r.blob() : null).catch(() => null);
+
+			// Prefetch the first chunk's audio the moment a message finishes, so
+			// clicking ▶ plays from cache (<0.2s) instead of waiting on synth (~0.5-1.5s).
+			function prefetchFirst(el, text) {
+				if (!el || firstBlob.has(el)) return;
+				const raw = firstChunkText(text, CHUNK0);   // un-sanitized slice of cap.text
+				const spoken = sanitize(raw);
+				if (!spoken) return;
+				firstBlob.set(el, null); // reserve slot to avoid double-fetch
+				synthFirst(spoken).then(b => {
+					if (b) firstBlob.set(el, { raw, spoken, blob: b }); else firstBlob.delete(el);
+				});
+			}
 
 			const lastMsgEl = () => {
 				const all = document.querySelectorAll('[aria-label="Assistant message with actions"]');
@@ -78,7 +106,9 @@
 				}
 				cap.done = true;
 				if (!cap.el) {
-					setTimeout(() => { const el = lastMsgEl(); if (el) { cap.el = el; capture.set(el, cap); } }, 400);
+					setTimeout(() => { const el = lastMsgEl(); if (el) { cap.el = el; capture.set(el, cap); prefetchFirst(el, cap.text); } }, 400);
+				} else {
+					prefetchFirst(cap.el, cap.text);   // warm the first chunk for instant ▶
 				}
 				if (cap.notify) cap.notify();
 				if (live === cap) setTimeout(() => { if (live === cap) live = null; }, 500);
@@ -210,10 +240,19 @@
 						}
 					};
 					const waitText = () => new Promise(res => { cap.notify = res; setTimeout(res, 1500); });
-					let from = 0, target = CHUNK0, pending = null;
+					let from = 0, target = CHUNK0, pending = null, usedPrefetch = false;
+					// If the first chunk was prefetched on completion, play it instantly
+					// and advance `from` past it so the pipeline continues from there.
+					const pf = firstBlob.get(msgEl);
 					const nextBlob = async () => {
 						for (;;) {
 							if (aborted) return null;
+							if (!usedPrefetch && pf && pf.blob && cap.text.startsWith(pf.raw.slice(0, 12))) {
+								usedPrefetch = true;
+								from = pf.raw.length;
+								target = Math.min(Math.round(CHUNK0 * PHI), CHUNK_MAX);
+								return pf.blob.arrayBuffer();
+							}
 							const c = cutChunk(cap.text, from, target, cap.done);
 							if (c) {
 								from = c.next; target = Math.min(Math.round(target * PHI), CHUNK_MAX);
