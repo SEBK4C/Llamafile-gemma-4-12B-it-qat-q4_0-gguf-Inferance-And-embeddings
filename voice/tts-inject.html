@@ -1,5 +1,5 @@
 		<script>
-		// ── gemma4 voice+controls v5 ─────────────────────────────────────────
+		// ── gemma4 voice+controls v6 ─────────────────────────────────────────
 		// ONE playback engine, ONE trigger: the per-message player. The old
 		// composer auto-speak is gone — it was a second, independent Audio
 		// object reading captured content while the player read the DOM (which
@@ -39,7 +39,6 @@
 
 			// ── content capture (content-only; reasoning deltas are ignored) ──
 			const capture = new WeakMap();   // msgEl -> {text, done}
-			const fullWav = new WeakMap();   // msgEl -> merged Blob
 			const firstBlob = new WeakMap(); // msgEl -> prefetched first-chunk WAV Blob (instant ▶)
 			let live = null;                 // {el, text, done, notify}
 
@@ -157,7 +156,7 @@
 			};
 
 			// ── single global playback engine ─────────────────────────────────
-			let engine = null; // {stop(), pauseToggle(), bar}
+			let engine = null; // {stop(), pauseToggle(), btn}
 			function stopAll() { if (engine) { const e = engine; engine = null; e.stop(); } }
 
 			const synth = text => fetch(TTS, {
@@ -165,162 +164,256 @@
 				body: JSON.stringify({ input: text, voice: 'af_heart' })
 			}).then(r => { if (!r.ok) throw new Error('tts ' + r.status); return r.blob(); });
 
-			function mergeWavs(bufs) {
-				// all sidecar WAVs: 24 kHz mono s16, 44-byte header
-				const datas = bufs.map(b => new Uint8Array(b).subarray(44));
-				const n = datas.reduce((a, d) => a + d.length, 0);
-				const out = new Uint8Array(44 + n);
-				out.set(new Uint8Array(bufs[0]).subarray(0, 44));
-				const v = new DataView(out.buffer);
-				v.setUint32(4, 36 + n, true); v.setUint32(40, n, true);
-				let o = 44;
-				for (const d of datas) { out.set(d, o); o += d.length; }
-				return new Blob([out], { type: 'audio/wav' });
-			}
-
 			// cut a chunk of >= target chars at a sentence boundary (or all of it)
 			function cutChunk(text, from, target, force) {
 				const rest = text.slice(from);
 				if (!rest.trim()) return null;
 				if (rest.length < target && !force) return null;
-				const window = rest.slice(0, Math.max(target * 2, target + 200));
+				const win = rest.slice(0, Math.max(target * 2, target + 200));
 				let cut = -1;
 				const re = /[.!?][)"']?\s/g; let m;
-				while ((m = re.exec(window))) { if (m.index + 2 >= target || cut === -1) cut = m.index + m[0].length; if (m.index + 2 >= target) break; }
+				while ((m = re.exec(win))) { if (m.index + 2 >= target || cut === -1) cut = m.index + m[0].length; if (m.index + 2 >= target) break; }
 				if (cut === -1 || cut < target * 0.4) cut = force ? rest.length : (rest.length >= target * 2 ? target : -1);
 				if (cut === -1) return null;
 				return { text: rest.slice(0, cut), next: from + cut };
 			}
 
-			const fmt = s => isFinite(s) && s !== null ? Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0') : '–:––';
+			// ── karaoke: wrap words in spans, sentence-level audio, word highlight ──
+			// Word timing = proportional chars-within-sentence interpolation (Kokoro
+			// has no timestamps but speaks at a near-uniform rate).
+			const norm = w => w.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
 
-			function buildPlayer(msgEl) {
-				const bar = document.createElement('div'); bar.className = 'g4v-player';
-				const play = document.createElement('button'); play.textContent = '▶'; play.title = 'Read aloud (starts within ~1s, even while streaming)';
-				const stopB = document.createElement('button'); stopB.textContent = '⏹'; stopB.title = 'Stop';
-				const rng = document.createElement('input'); rng.type = 'range'; rng.min = 0; rng.max = 1000; rng.value = 0;
-				const tm = document.createElement('span'); tm.className = 'g4v-time'; tm.textContent = '–:–– / –:––';
-				bar.append(play, stopB, rng, tm);
-
-				const setIdle = () => { play.textContent = '▶'; play.classList.remove('g4v-spin'); rng.classList.remove('g4v-live'); rng.value = 0; tm.textContent = '–:–– / –:––'; };
-
-				function playCached(blob) {
-					const audio = new Audio(URL.createObjectURL(blob));
-					let stopped = false;
-					engine = {
-						bar,
-						stop() { stopped = true; try { audio.pause(); } catch {} setIdle(); },
-						pauseToggle() { audio.paused ? audio.play() : audio.pause(); }
-					};
-					audio.ontimeupdate = () => {
-						if (stopped) return;
-						if (audio.duration) rng.value = Math.round(1000 * audio.currentTime / audio.duration);
-						tm.textContent = fmt(audio.currentTime) + ' / ' + fmt(audio.duration);
-					};
-					audio.onplay = () => { if (!stopped) play.textContent = '⏸'; };
-					audio.onpause = () => { if (!stopped && !audio.ended) play.textContent = '▶'; };
-					audio.onended = () => { if (engine && engine.bar === bar) engine = null; setIdle(); };
-					rng.oninput = () => { if (audio.duration) audio.currentTime = audio.duration * rng.value / 1000; };
-					audio.play().catch(() => { setIdle(); if (engine && engine.bar === bar) engine = null; });
+			function buildKaraoke(msgEl, capText) {
+				if (msgEl.__g4v) return msgEl.__g4v;
+				// wrap every word in the message body (skip code, our controls)
+				const walker = document.createTreeWalker(msgEl, NodeFilter.SHOW_TEXT, { acceptNode(n) {
+					const p = n.parentElement;
+					if (!p || p.closest('.g4v-ctl,pre,code,button,textarea')) return NodeFilter.FILTER_REJECT;
+					return n.textContent.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+				}});
+				const nodes = []; let n;
+				while ((n = walker.nextNode())) nodes.push(n);
+				const words = [];
+				for (const t of nodes) {
+					const frag = document.createDocumentFragment();
+					for (const part of t.textContent.split(/(\s+)/)) {
+						if (!part) continue;
+						if (/^\s+$/.test(part)) { frag.appendChild(document.createTextNode(part)); continue; }
+						const s = document.createElement('span');
+						s.className = 'g4v-w'; s.textContent = part; s.dataset.i = words.length;
+						words.push({ span: s, text: part });
+						frag.appendChild(s);
+					}
+					t.parentNode.replaceChild(frag, t);
 				}
-
-				async function playStreaming(cap) {
-					let aborted = false, paused = false, audio = null;
-					const played = [];        // arrayBuffers of finished chunks
-					let elapsedBase = 0;      // seconds of audio fully played
-					play.textContent = '⟳'; play.classList.add('g4v-spin');
-					rng.classList.add('g4v-live');
-					engine = {
-						bar,
-						stop() { aborted = true; if (audio) try { audio.pause(); } catch {} setIdle(); },
-						pauseToggle() {
-							paused = !paused;
-							if (audio) { paused ? audio.pause() : audio.play(); }
-							play.textContent = paused ? '▶' : (audio ? '⏸' : '⟳');
-						}
-					};
-					const waitText = () => new Promise(res => { cap.notify = res; setTimeout(res, 1500); });
-					let from = 0, target = CHUNK0, pending = null, usedPrefetch = false;
-					// If the first chunk was prefetched on completion, play it instantly
-					// and advance `from` past it so the pipeline continues from there.
-					const pf = firstBlob.get(msgEl);
-					const nextBlob = async () => {
-						for (;;) {
-							if (aborted) return null;
-							if (!usedPrefetch && pf && pf.blob && cap.text.startsWith(pf.raw.slice(0, 12))) {
-								usedPrefetch = true;
-								from = pf.raw.length;
-								target = Math.min(Math.round(CHUNK0 * PHI), CHUNK_MAX);
-								return pf.blob.arrayBuffer();
+				// align to captured content-only text: skip DOM words that belong to
+				// the reasoning block (rendered before the answer) by locating where
+				// the capture's first tokens appear in the DOM word list.
+				let start = 0;
+				if (capText) {
+					const capToks = sanitize(capText).split(/\s+/).map(norm).filter(Boolean).slice(0, 6);
+					if (capToks.length >= 3) {
+						for (let i = 0; i <= words.length - capToks.length; i++) {
+							let ok = 0;
+							for (let j = 0; j < capToks.length; j++) {
+								if (norm(words[i + j].text) === capToks[j]) ok++;
 							}
-							const c = cutChunk(cap.text, from, target, cap.done);
-							if (c) {
-								from = c.next; target = Math.min(Math.round(target * PHI), CHUNK_MAX);
-								const s = sanitize(c.text);
-								if (!s) continue;
-								return synth(s).then(b => b.arrayBuffer());
-							}
-							if (cap.done) return null;
-							await waitText();
+							if (ok >= capToks.length - 1) { start = i; break; }
 						}
-					};
-					try {
-						pending = nextBlob();
-						for (;;) {
-							const bufP = pending; if (!bufP) break;
-							const buf = await bufP;
-							if (aborted || !buf) break;
-							pending = nextBlob();
-							played.push(buf);
-							while (paused && !aborted) await new Promise(r => setTimeout(r, 150));
-							if (aborted) break;
-							await new Promise((res, rej) => {
-								audio = new Audio(URL.createObjectURL(new Blob([buf], { type: 'audio/wav' })));
-								audio.onended = res; audio.onerror = rej;
-								audio.onplay = () => { if (!aborted && !paused) play.textContent = '⏸'; };
-								const dur = () => {
-									if (aborted) return;
-									tm.textContent = fmt(elapsedBase + (audio.currentTime || 0)) + (cap.done && !pending ? '' : ' / …');
-								};
-								audio.ontimeupdate = dur;
-								if (paused) {
-									const w = setInterval(() => {
-										if (aborted) { clearInterval(w); res(); }
-										else if (!paused) { clearInterval(w); audio.play().catch(rej); }
-									}, 150);
-								} else audio.play().catch(rej);
-							});
-							elapsedBase += (played[played.length - 1].byteLength - 44) / 2 / 24000;
-							if (aborted) break;
-						}
-					} catch (e) { console.warn('[player]', e); }
-					if (!aborted) {
-						// merge for instant seekable replay
-						if (played.length) fullWav.set(msgEl, mergeWavs(played));
-						if (engine && engine.bar === bar) engine = null;
-						setIdle();
-						const b = fullWav.get(msgEl);
-						if (b) { const d = (b.size - 44) / 2 / 24000; tm.textContent = '0:00 / ' + fmt(d); }
 					}
 				}
+				// group speakable words into sentences
+				const sents = []; let cur = [];
+				for (let i = start; i < words.length; i++) {
+					cur.push(i);
+					const w = words[i].text;
+					if ((/[.!?…][)"']?$/.test(w) && cur.length >= 3) || cur.length >= 60) { sents.push(cur); cur = []; }
+				}
+				if (cur.length) sents.push(cur);
+				const k = { words, sents, audio: new Map() };  // audio: sentIdx(+offset key) -> Blob
+				msgEl.__g4v = k;
+				return k;
+			}
 
-				play.onclick = () => {
-					if (engine && engine.bar === bar) { engine.pauseToggle(); return; }
-					stopAll();
-					const cached = fullWav.get(msgEl);
-					if (cached) { playCached(cached); return; }
-					const cap = capture.get(msgEl) || (live && live.el === msgEl ? live : null)
-						|| { el: msgEl, text: sanitize(msgEl.textContent || ''), done: true, notify: null };
-					playStreaming(cap);
+			function clearHl(k) { for (const w of k.words) w.span.classList.remove('g4v-hl'); }
+
+			// Speak sentences fromSent..end, starting mid-sentence at word fromWord.
+			async function playKaraoke(msgEl, btn, k, fromSent, fromWord) {
+				let aborted = false, paused = false, audio = null;
+				const setIdle = () => { btn.textContent = '▶'; btn.classList.remove('g4v-spin'); clearHl(k); };
+				engine = {
+					btn,
+					stop() { aborted = true; if (audio) try { audio.pause(); } catch {} setIdle(); },
+					pauseToggle() {
+						paused = !paused;
+						if (audio) { paused ? audio.pause() : audio.play().catch(() => {}); }
+						btn.textContent = paused ? '▶' : '⏸';
+					}
 				};
-				stopB.onclick = () => { if (engine && engine.bar === bar) stopAll(); else setIdle(); };
-				return bar;
+				btn.textContent = '⟳'; btn.classList.add('g4v-spin');
+				const sentText = (si, w0) => {
+					const idxs = k.sents[si].filter(i => i >= (w0 || 0));
+					return sanitize(idxs.map(i => k.words[i].text).join(' '));
+				};
+				const fetchSent = (si, w0) => {
+					const key = si + ':' + (w0 || 0);
+					if (k.audio.has(key)) return Promise.resolve(k.audio.get(key));
+					const t = sentText(si, w0);
+					if (!t) return Promise.resolve(null);
+					return synth(t).then(b => { k.audio.set(key, b); return b; }).catch(() => null);
+				};
+				let pending = fetchSent(fromSent, fromWord);
+				for (let si = fromSent; si < k.sents.length; si++) {
+					if (aborted) return;
+					const w0 = si === fromSent ? fromWord : 0;
+					const blob = await pending;
+					pending = si + 1 < k.sents.length ? fetchSent(si + 1, 0) : null;
+					if (aborted) return;
+					if (!blob) continue;                       // failed/empty chunk: skip, don't die
+					const idxs = k.sents[si].filter(i => i >= w0);
+					const lens = idxs.map(i => k.words[i].text.length + 1);
+					const total = lens.reduce((a, b) => a + b, 0);
+					while (paused && !aborted) await new Promise(r => setTimeout(r, 120));
+					if (aborted) return;
+					try {
+						await new Promise((res) => {
+							audio = new Audio(URL.createObjectURL(blob));
+							audio.onended = res;
+							audio.onerror = res;               // skip broken audio, keep reading
+							audio.onplay = () => { if (!aborted && !paused) btn.textContent = '⏸'; btn.classList.remove('g4v-spin'); };
+							audio.ontimeupdate = () => {
+								if (aborted || !audio.duration) return;
+								const p = audio.currentTime / audio.duration;
+								let acc = 0, hi = idxs[idxs.length - 1];
+								for (let j = 0; j < idxs.length; j++) { acc += lens[j]; if (acc / total >= p) { hi = idxs[j]; break; } }
+								for (const i of idxs) k.words[i].span.classList.toggle('g4v-hl', i === hi);
+								k.words[hi].span.scrollIntoView({ block: 'nearest' });
+							};
+							if (paused) {
+								const w = setInterval(() => {
+									if (aborted) { clearInterval(w); res(); }
+									else if (!paused) { clearInterval(w); audio.play().catch(res); }
+								}, 120);
+							} else audio.play().catch(res);
+						});
+					} catch {}
+					for (const i of idxs) k.words[i].span.classList.remove('g4v-hl');
+				}
+				if (!aborted) { if (engine && engine.btn === btn) engine = null; setIdle(); }
+			}
+
+			// live streaming read (message still generating): no highlights yet,
+			// per-chunk failures are skipped, prefetched first chunk plays instantly.
+			async function playStreamingLive(msgEl, btn, cap) {
+				let aborted = false, paused = false, audio = null;
+				const setIdle = () => { btn.textContent = '▶'; btn.classList.remove('g4v-spin'); };
+				engine = {
+					btn,
+					stop() { aborted = true; if (audio) try { audio.pause(); } catch {} setIdle(); },
+					pauseToggle() {
+						paused = !paused;
+						if (audio) { paused ? audio.pause() : audio.play().catch(() => {}); }
+						btn.textContent = paused ? '▶' : '⏸';
+					}
+				};
+				btn.textContent = '⟳'; btn.classList.add('g4v-spin');
+				const waitText = () => new Promise(res => { cap.notify = res; setTimeout(res, 1500); });
+				let from = 0, target = CHUNK0, usedPrefetch = false;
+				const pf = firstBlob.get(msgEl);
+				const nextBlob = async () => {
+					for (;;) {
+						if (aborted) return null;
+						if (!usedPrefetch && pf && pf.blob && cap.text.startsWith(pf.raw.slice(0, 12))) {
+							usedPrefetch = true; from = pf.raw.length;
+							target = Math.min(Math.round(CHUNK0 * PHI), CHUNK_MAX);
+							return pf.blob;
+						}
+						const c = cutChunk(cap.text, from, target, cap.done);
+						if (c) {
+							from = c.next; target = Math.min(Math.round(target * PHI), CHUNK_MAX);
+							const s = sanitize(c.text);
+							if (!s) continue;
+							const b = await synth(s).catch(() => null);
+							if (b) return b;                    // synth failure: skip chunk, keep going
+							continue;
+						}
+						if (cap.done) return null;
+						await waitText();
+					}
+				};
+				let pending = nextBlob();
+				for (;;) {
+					if (aborted) return;
+					const blob = await pending;
+					if (aborted || !blob) break;
+					pending = nextBlob();
+					while (paused && !aborted) await new Promise(r => setTimeout(r, 120));
+					if (aborted) return;
+					await new Promise((res) => {
+						audio = new Audio(URL.createObjectURL(blob));
+						audio.onended = res;
+						audio.onerror = res;                   // never kills the pipeline
+						audio.onplay = () => { if (!aborted && !paused) { btn.textContent = '⏸'; btn.classList.remove('g4v-spin'); } };
+						if (paused) {
+							const w = setInterval(() => {
+								if (aborted) { clearInterval(w); res(); }
+								else if (!paused) { clearInterval(w); audio.play().catch(res); }
+							}, 120);
+						} else audio.play().catch(res);
+					});
+				}
+				if (!aborted) { if (engine && engine.btn === btn) engine = null; setIdle(); }
+			}
+
+			function buildControls(msgEl) {
+				const wrap = document.createElement('span');
+				wrap.className = 'g4v-ctl';
+				const btn = document.createElement('button');
+				btn.className = 'g4v-play';
+				btn.type = 'button';
+				btn.textContent = '▶';
+				btn.title = 'Read aloud · click any word to jump there · ⏸ pauses';
+				wrap.appendChild(btn);
+
+				const startKaraoke = (fromSent, fromWord) => {
+					stopAll();
+					const cap = capture.get(msgEl);
+					const k = buildKaraoke(msgEl, cap ? cap.text : '');
+					if (!k.sents.length) return;
+					playKaraoke(msgEl, btn, k, fromSent, fromWord);
+				};
+
+				btn.onclick = () => {
+					if (engine && engine.btn === btn) { engine.pauseToggle(); return; }
+					stopAll();
+					const cap = capture.get(msgEl) || (live && live.el === msgEl ? live : null);
+					if (cap && !cap.done) { playStreamingLive(msgEl, btn, cap); return; }
+					startKaraoke(0, 0);
+				};
+
+				// click a word -> jump playback there (works before/behind, play or paused)
+				msgEl.addEventListener('click', e => {
+					const w = e.target.closest && e.target.closest('.g4v-w');
+					if (!w || !msgEl.__g4v) return;
+					const i = parseInt(w.dataset.i, 10);
+					const k = msgEl.__g4v;
+					const si = k.sents.findIndex(s => s.includes(i));
+					if (si === -1) return;
+					clearHl(k);
+					startKaraoke(si, i);
+				});
+				return wrap;
 			}
 
 			function ensurePlayers() {
 				for (const msg of document.querySelectorAll('[aria-label="Assistant message with actions"]')) {
-					if (msg.querySelector('.g4v-player')) continue;
-					msg.appendChild(buildPlayer(msg));
+					if (msg.querySelector('.g4v-ctl')) continue;
+					const ctl = buildControls(msg);
+					// "under the reasoning dropdown, before the answer": if the message
+					// has a collapsible reasoning block, place after it; else at top.
+					const det = msg.querySelector('details');
+					if (det) det.insertAdjacentElement('afterend', ctl);
+					else msg.insertAdjacentElement('afterbegin', ctl);
 				}
 			}
 
@@ -371,13 +464,12 @@
 				'.g4v-rec{animation:g4vpulse 1.2s infinite;color:#fff !important}' +
 				'@keyframes g4vspin{to{transform:rotate(360deg)}}' +
 				'.g4v-spin{animation:g4vspin 1s linear infinite}' +
-				'@keyframes g4vslide{to{background-position:26px 0}}' +
-				'.g4v-live{background:repeating-linear-gradient(90deg,#2e7d32 0 8px,#1b5e20 8px 16px);background-size:26px 100%;animation:g4vslide .8s linear infinite;pointer-events:none;border-radius:3px}' +
-				'.g4v-player{display:flex;align-items:center;gap:6px;margin-top:4px;opacity:.75;font:11px system-ui}' +
-				'.g4v-player:hover{opacity:1}' +
-				'.g4v-player button{width:22px;height:22px;border-radius:50%;border:1px solid #555;background:#1b1f20;color:#eee;cursor:pointer;font-size:10px;line-height:1;display:inline-flex;align-items:center;justify-content:center}' +
-				'.g4v-player input[type=range]{width:130px;height:4px;accent-color:#4caf50}' +
-				'.g4v-player .g4v-time{color:#888;min-width:70px}';
+				'.g4v-w{cursor:pointer;border-radius:3px}' +
+				'.g4v-w:hover{background:#4caf5030}' +
+				'.g4v-hl{background:#2e7d32;color:#fff}' +
+				'.g4v-ctl{display:block;margin:2px 0}' +
+				'.g4v-play{width:24px;height:24px;border-radius:50%;border:1px solid #555;background:#1b1f20;color:#eee;cursor:pointer;font-size:11px;line-height:1;display:inline-flex;align-items:center;justify-content:center;opacity:.8}' +
+				'.g4v-play:hover{opacity:1}';
 			document.documentElement.appendChild(style);
 
 			function findSend() {
