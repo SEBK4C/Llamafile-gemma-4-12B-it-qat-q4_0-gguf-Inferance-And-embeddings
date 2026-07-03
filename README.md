@@ -480,6 +480,41 @@ If you publish, note the model weights are Apache 2.0 with Google's
 [Gemma 4 license link](https://ai.google.dev/gemma/docs/gemma_4_license) on
 the card — mirror that in your model card.
 
+## Hardware auto-tuning, --clear-all, and customizing baked settings
+
+**The packaged file tunes itself to your hardware.** At startup it detects the
+backend and applies validated defaults for anything you didn't set yourself:
+
+| Detected | Applied defaults |
+|---|---|
+| NVIDIA/AMD GPU | `-c 131072 -ub 256 -ctk f16 -ctv f16 -sm none --spec-type draft-mtp --spec-draft-n-max 4` |
+| Apple Silicon (M1–M5, Metal) | `-c 8192 -ub 1024 --no-mmproj-offload --spec-type draft-mtp --spec-draft-n-max 2` |
+| CPU only | `-c 8192 -ub 512 --spec-type none` |
+
+Override any single flag on the command line and the auto-tuner leaves that
+flag alone; set `LLAMAFILE_NO_AUTOTUNE=1` to disable it entirely.
+
+**Launched it twice?** The second copy detects a running Gemma server on the
+port, explains it in plain words, and opens the existing web UI in your
+browser instead of dying with a bind error.
+
+**`--clear-all`** wipes every piece of on-disk state (the KV slot-save
+directory and the extracted `~/.llamafile/v/*` cache), then starts fresh —
+useful when experimenting with configs, since saved KV states survive
+restarts and can mask config changes.
+
+**Bake your own settings (advanced).** The `.args` inside the APE is just a
+zip member; replace it with your own using the bundled zipalign:
+
+```sh
+unzip -p dist/gemma4-server.llamafile .args > my.args   # start from current
+$EDITOR my.args                                          # one token per line, keep trailing "..."
+cp my.args .args
+./bin/zipalign -j0 dist/gemma4-server.llamafile .args   # write it back
+```
+
+The trailing `...` line means command-line flags still override baked ones.
+
 ## Credits
 
 This project stands on excellent open work:

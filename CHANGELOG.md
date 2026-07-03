@@ -2,6 +2,25 @@
 
 All notable changes to this project. Dates are 2026.
 
+## [v0.3.0] — 2026-07-04 — universal artifact: hardware auto-tuning
+
+- **Hardware auto-tuning**: the packaged file now detects its platform at
+  startup and applies validated defaults (CUDA / Apple-Silicon Metal / CPU)
+  for every flag the user didn't set — one file, tuned everywhere. Override
+  any flag individually, or `LLAMAFILE_NO_AUTOTUNE=1` to disable. The baked
+  `.args` now carry only universal flags.
+- **Duplicate-launch help**: starting the file while another copy is running
+  no longer dies with a cryptic bind error — it explains in plain words,
+  offers the fixes, and opens the existing web UI in your browser.
+- **`--clear-all`**: wipe all on-disk state (KV slot-saves, extracted
+  `~/.llamafile/v/*`) and start fresh.
+- **Voice UI degrades gracefully**: read-aloud controls only render when the
+  Kokoro sidecar is reachable (`/tts`); the 🎙 mic (audio *input*, which IS
+  baked into the model) always works. Baking the voice into the APE itself
+  (TTS.cpp: Kokoro on GGML/GGUF, no ONNX runtime) is scoped as the next
+  milestone.
+- README: zipalign guide for baking your own settings.
+
 ## [v0.2.0] — 2026-07-03 — CUDA GPU support, voice UI, karaoke read-aloud
 
 Everything below was developed and verified on a Proxmox host with an RTX

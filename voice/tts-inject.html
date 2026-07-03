@@ -1,5 +1,5 @@
 		<script>
-		// ── gemma4 voice+controls v9 ─────────────────────────────────────────
+		// ── gemma4 voice+controls v10 ─────────────────────────────────────────
 		// ONE playback engine, ONE trigger: the per-message player. The old
 		// composer auto-speak is gone — it was a second, independent Audio
 		// object reading captured content while the player read the DOM (which
@@ -20,6 +20,11 @@
 		// Composer keeps: 🎙 mic (red pulse while recording) · 0° · 💭.
 		(() => {
 			const TTS = '/tts/v1/audio/speech';
+			// The Kokoro voice is a sidecar, not baked into the llamafile. Probe
+			// once; without it we render no read-aloud controls (mic stays — audio
+			// INPUT is part of the model itself).
+			let ttsUp = null;
+			fetch('/tts/health').then(r => { ttsUp = r.ok; }).catch(() => { ttsUp = false; });
 			const LS_T0 = 'gemma-temp0';
 			const LS_THINK = 'gemma-think-always';
 			const LS_RATE = 'gemma-tts-rate';
@@ -69,6 +74,7 @@
 			// Prefetch the first chunk's audio the moment a message finishes, so
 			// clicking ▶ plays from cache (<0.2s) instead of waiting on synth (~0.5-1.5s).
 			function prefetchFirst(el, text) {
+				if (ttsUp !== true) return;
 				if (!el || firstBlob.has(el)) return;
 				const raw = firstChunkText(text, CHUNK0);   // un-sanitized slice of cap.text
 				const spoken = sanitize(raw);
@@ -468,6 +474,7 @@
 			}
 
 			function ensurePlayers() {
+				if (ttsUp !== true) return;
 				for (const msg of document.querySelectorAll('[aria-label="Assistant message with actions"]')) {
 					const ctl = msg.querySelector('.g4v-ctl') || buildControls(msg);
 					// keep the controls directly above the ANSWER body (i.e. below the
