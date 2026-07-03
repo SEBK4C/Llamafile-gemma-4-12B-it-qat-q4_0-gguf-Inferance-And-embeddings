@@ -1,5 +1,5 @@
 		<script>
-		// ── gemma4 voice+controls v8 ─────────────────────────────────────────
+		// ── gemma4 voice+controls v9 ─────────────────────────────────────────
 		// ONE playback engine, ONE trigger: the per-message player. The old
 		// composer auto-speak is gone — it was a second, independent Audio
 		// object reading captured content while the player read the DOM (which
@@ -194,7 +194,18 @@
 			const norm = w => w.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
 
 			function buildKaraoke(msgEl, capText) {
-				if (msgEl.__g4v) return msgEl.__g4v;
+				// Svelte re-renders (markdown blocks stabilizing, list updates) replace
+				// our spans with fresh nodes — detect and re-wrap instead of
+				// highlighting detached elements. Audio cache survives via text keys.
+				if (msgEl.__g4v) {
+					const w0 = msgEl.__g4v.words[0];
+					if (w0 && w0.span.isConnected) return msgEl.__g4v;
+					const oldAudio = msgEl.__g4v.audio;
+					delete msgEl.__g4v;
+					const k = buildKaraoke(msgEl, capText);
+					k.audio = oldAudio;                 // text-keyed: still valid
+					return k;
+				}
 				// wrap every word in the message body (skip code, our controls)
 				const walker = document.createTreeWalker(msgEl, NodeFilter.SHOW_TEXT, { acceptNode(n) {
 					const p = n.parentElement;
@@ -248,7 +259,8 @@
 			function clearHl(k) { for (const w of k.words) w.span.classList.remove('g4v-hl'); }
 
 			// Speak sentences fromSent..end, starting mid-sentence at word fromWord.
-			async function playKaraoke(msgEl, btn, k, fromSent, fromWord) {
+			async function playKaraoke(msgEl, btn, kIn, fromSent, fromWord) {
+				let k = kIn;
 				let aborted = false, paused = false, audio = null;
 				// follow-latch: ANY user scroll intent stops auto-follow until the
 				// user returns to the reading (word visible again) or clicks play/word
@@ -275,15 +287,21 @@
 					return sanitize(idxs.map(i => k.words[i].text).join(' '));
 				};
 				const fetchSent = (si, w0) => {
-					const key = si + ':' + (w0 || 0);
-					if (k.audio.has(key)) return Promise.resolve(k.audio.get(key));
 					const t = sentText(si, w0);
 					if (!t) return Promise.resolve(null);
-					return synth(t).then(b => { k.audio.set(key, b); return b; }).catch(() => null);
+					if (k.audio.has(t)) return Promise.resolve(k.audio.get(t));
+					return synth(t).then(b => { k.audio.set(t, b); return b; }).catch(() => null);
 				};
 				let pending = fetchSent(fromSent, fromWord);
 				for (let si = fromSent; si < k.sents.length; si++) {
 					if (aborted) return;
+					// re-wrap if a Svelte re-render destroyed the spans mid-read
+					const probe = k.words[k.sents[si][0]];
+					if (probe && !probe.span.isConnected) {
+						const fresh = buildKaraoke(msgEl, '');
+						if (fresh.sents.length === k.sents.length) k = fresh;
+						else { k = fresh; if (si >= k.sents.length) break; }
+					}
 					const w0 = si === fromSent ? fromWord : 0;
 					const blob = await pending;
 					pending = si + 1 < k.sents.length ? fetchSent(si + 1, 0) : null;
@@ -434,6 +452,8 @@
 				};
 
 				// click a word -> jump playback there (works before/behind, play or paused)
+				if (msgEl.__g4vClick) return wrap;
+				msgEl.__g4vClick = true;
 				msgEl.addEventListener('click', e => {
 					const w = e.target.closest && e.target.closest('.g4v-w');
 					if (!w || !msgEl.__g4v) return;
@@ -551,23 +571,40 @@
 						else { mic.textContent = '🎙'; mic.classList.remove('g4v-rec'); attachToUi(await stopRec()); }
 					} catch (e) { console.warn('[mic]', e); mic.textContent = '🎙'; mic.classList.remove('g4v-rec'); rec = null; }
 				};
-				const t0 = mk('0°', 'Temperature 0 (deterministic + fastest) · ✓ = on');
-				const t0B = mkBadge(flag(LS_T0, false)); t0.appendChild(t0B);
-				t0.onclick = () => { setFlag(LS_T0, !flag(LS_T0, false)); t0B.style.display = flag(LS_T0, false) ? 'block' : 'none'; };
-				const th = mk('💭', 'Reason on every message · ✓ = on');
-				const thB = mkBadge(flag(LS_THINK, true)); th.appendChild(thB);
-				th.onclick = () => { setFlag(LS_THINK, !flag(LS_THINK, true)); thB.style.display = flag(LS_THINK, true) ? 'block' : 'none'; };
-				send.parentElement.insertBefore(mic, send);   // [🎙][0°][💭][Send]
-				send.parentElement.insertBefore(t0, send);
-				send.parentElement.insertBefore(th, send);
+				send.parentElement.insertBefore(mic, send);   // [🎙][Send]
+			}
+
+			// ── 0° and 💭 toggles inside the composer "+" menu ────────────────
+			function ensureMenuItems() {
+				for (const menu of document.querySelectorAll('[data-slot="dropdown-menu-content"]')) {
+					if (menu.querySelector('.g4v-mi')) continue;
+					const items = Array.from(menu.querySelectorAll('[data-slot="dropdown-menu-item"],[data-slot="dropdown-menu-sub-trigger"]'));
+					if (!items.length || !/add files/i.test(menu.textContent || '')) continue;   // only the + menu
+					const proto = items[items.length - 1];
+					const mkItem = (label, get, toggle) => {
+						const it = document.createElement('div');
+						it.className = proto.className;
+						it.classList.add('g4v-mi');
+						it.setAttribute('role', 'menuitem');
+						it.style.cursor = 'pointer';
+						const paint = () => { it.textContent = (get() ? '✓ ' : '\u2003') + label; };
+						paint();
+						it.addEventListener('click', e => { e.stopPropagation(); toggle(); paint(); });
+						return it;
+					};
+					menu.appendChild(mkItem('0\u00b0 Temperature zero', () => flag(LS_T0, false),
+						() => setFlag(LS_T0, !flag(LS_T0, false))));
+					menu.appendChild(mkItem('\ud83d\udcad Reason every turn', () => flag(LS_THINK, true),
+						() => setFlag(LS_THINK, !flag(LS_THINK, true))));
+				}
 			}
 
 			let raf = 0;
 			new MutationObserver(() => {
 				cancelAnimationFrame(raf);
-				raf = requestAnimationFrame(() => { ensureButtons(); ensurePlayers(); });
+				raf = requestAnimationFrame(() => { ensureButtons(); ensurePlayers(); ensureMenuItems(); });
 			}).observe(document.documentElement, { childList: true, subtree: true });
-			addEventListener('DOMContentLoaded', () => { ensureButtons(); ensurePlayers(); });
+			addEventListener('DOMContentLoaded', () => { ensureButtons(); ensurePlayers(); ensureMenuItems(); });
 		})();
 		</script>
 	</body>
