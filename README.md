@@ -516,15 +516,24 @@ red while recording; click again to stop) and attaches it as audio. Gemma 4
 hears the audio natively — no transcription step. Tip: speak clearly and
 close to the mic; very quiet recordings read as silence.
 
-### 🗣 Talk over the model (barge-in)
+### 🗣 Auto voice mode (hands-free)
 
-Enable **“🗣 Talk-over barge-in”** in the composer's **+** menu (asks for
-microphone permission on first playback). Then, while the model is reading
-aloud, just start talking:
+Click the **auto-listen button** next to the microphone (a mic with a dot
+that turns red when armed). Once on, it listens continuously:
 
-1. the reading pauses as soon as you speak,
-2. your utterance records while you talk,
-3. when you pause (~1 second of silence), it is sent automatically.
+1. start talking and it records (the button rings red while it hears you); if
+   the model is reading aloud, it pauses so you can interrupt;
+2. when you stop, a **ring fills around the button over 2 seconds** — a visible
+   countdown so you can *keep talking to extend it* (resuming resets the timer
+   and appends to the same utterance);
+3. at the end of the countdown the recording is sent automatically (held until
+   the model is free if it's still answering).
+
+**Hover the button** for the list of available commands and a live status
+line (listening / hearing you / sending in 1.4s), plus a **sensitivity
+slider** — turn it down in noisy rooms, up if it misses you. **Click during
+the countdown to cancel** that utterance; click while idle to turn auto mode
+off. Headphones recommended so playback doesn't feed back into the mic.
 
 ### 🎛 Spoken commands
 
