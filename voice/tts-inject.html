@@ -1,5 +1,5 @@
 		<script>
-		// ── gemma4 voice+controls v18 ─────────────────────────────────────────
+		// ── gemma4 voice+controls v19 ─────────────────────────────────────────
 		// ONE playback engine, ONE trigger: the per-message player. The old
 		// composer auto-speak is gone — it was a second, independent Audio
 		// object reading captured content while the player read the DOM (which
@@ -9,11 +9,11 @@
 		//   fetch tee → capture content-only deltas per message element
 		//   → user clicks ▶ on a message
 		//   → stopAll() kills any other playback
-		//   → golden-ratio chunker: first cut ≈120 chars at a sentence
-		//     boundary (≈1 s to first audio, even mid-generation), each next
-		//     chunk ×1.618 up to 1400 chars; chunk N+1 synthesizes while N
-		//     plays; if the stream is still running the chunker waits for
-		//     more text
+		//   → golden-ratio chunker (word-based): first cut = 10 complete
+		//     words (or an earlier sentence end), each next chunk ×1.618 up
+		//     to 240 words; cuts NEVER land mid-word; chunk N+1 synthesizes
+		//     while N plays; if the stream is still running the chunker
+		//     waits for more text
 		//   → when the stream ends and all chunks are played, the chunk WAVs
 		//     are merged into one blob → the timeline becomes fully seekable.
 		//   ⏸ pauses (chunker gates on it), ⏹ hard-stops and resets.
@@ -93,7 +93,10 @@
 				for (const l of rateLabels) l.textContent = rate().toFixed(1) + '\u00d7';
 			}
 			const PHI = 1.618;
-			const CHUNK0 = 55, CHUNK_MAX = 1400;   // small first chunk ⇒ ~0.5s synth
+			// chunk sizes are WORDS, not chars: a chunk must never end mid-word
+			// (a split word is synthesized as two garbage syllable groups).
+			// 10 complete words first ⇒ fast first utterance, then golden growth.
+			const WORDS0 = 10, WORDS_MAX = 240;
 
 			const flag = (k, d) => { const v = localStorage.getItem(k); return v === null ? d : v === '1'; };
 			const setFlag = (k, v) => localStorage.setItem(k, v ? '1' : '0');
@@ -333,18 +336,31 @@
 				return go().catch(() => { probeTts(); return new Promise(res => setTimeout(res, 2500)).then(go); });
 			};
 
-			// cut a chunk of >= target chars at a sentence boundary (or all of it)
-			function cutChunk(text, from, target, force) {
+			// cut a chunk of ~targetWords COMPLETE words. Cuts land only after a
+			// whole word (never mid-word — a split word is spoken as garbage);
+			// a sentence end after 40% of the target cuts early. While the
+			// stream is live the final word may still be growing, so it only
+			// counts once whitespace follows it (or the stream is done).
+			function cutChunk(text, from, targetWords, force) {
 				const rest = text.slice(from);
 				if (!rest.trim()) return null;
-				if (rest.length < target && !force) return null;
-				const win = rest.slice(0, Math.max(target * 2, target + 200));
-				let cut = -1;
-				const re = /[.!?][)"']?\s/g; let m;
-				while ((m = re.exec(win))) { if (m.index + 2 >= target || cut === -1) cut = m.index + m[0].length; if (m.index + 2 >= target) break; }
-				if (cut === -1 || cut < target * 0.4) cut = force ? rest.length : (rest.length >= target * 2 ? target : -1);
-				if (cut === -1) return null;
-				return { text: rest.slice(0, cut), next: from + cut };
+				const re = /\S+/g;
+				let m, n = 0, cutEnd = -1;
+				while ((m = re.exec(rest))) {
+					const wordEnd = m.index + m[0].length;
+					if (wordEnd >= rest.length && !force) break;   // possibly partial last word
+					n++;
+					if (n >= targetWords || (n >= Math.ceil(targetWords * 0.4) && /[.!?][)"'”]*$/.test(m[0]))) {
+						cutEnd = wordEnd;
+						break;
+					}
+				}
+				if (cutEnd === -1) {
+					if (!force) return null;                        // wait for more words
+					cutEnd = rest.length;
+				}
+				if (!rest.slice(0, cutEnd).trim()) return null;
+				return { text: rest.slice(0, cutEnd), next: from + cutEnd };
 			}
 
 			// ── karaoke: wrap words in spans, sentence-level audio, word highlight ──
@@ -529,19 +545,19 @@
 				};
 				btn.textContent = '⟳'; btn.classList.add('g4v-spin');
 				const waitText = () => new Promise(res => { cap.notify = res; setTimeout(res, 1500); });
-				let from = 0, target = CHUNK0, usedPrefetch = false;
+				let from = 0, target = WORDS0, usedPrefetch = false;
 				const pf = firstBlob.get(msgEl);
 				const nextBlob = async () => {
 					for (;;) {
 						if (aborted) return null;
 						if (!usedPrefetch && pf && pf.blob && cap.text.startsWith(pf.raw.slice(0, 12))) {
 							usedPrefetch = true; from = pf.raw.length;
-							target = Math.min(Math.round(CHUNK0 * PHI), CHUNK_MAX);
+							target = Math.min(Math.round(WORDS0 * PHI), WORDS_MAX);
 							return pf.blob;
 						}
 						const c = cutChunk(cap.text, from, target, cap.done);
 						if (c) {
-							from = c.next; target = Math.min(Math.round(target * PHI), CHUNK_MAX);
+							from = c.next; target = Math.min(Math.round(target * PHI), WORDS_MAX);
 							const s = sanitize(c.text);
 							if (!s) continue;
 							const b = await synth(s).catch(() => null);

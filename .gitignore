@@ -19,3 +19,4 @@ __pycache__/
 .DS_Store
 .kvcache/
 .gemma4-kv/
+bench/results.tsv
