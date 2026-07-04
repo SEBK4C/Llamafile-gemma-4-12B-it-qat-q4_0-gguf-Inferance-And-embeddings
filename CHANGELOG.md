@@ -2,6 +2,31 @@
 
 All notable changes to this project. Dates are 2026.
 
+## [v0.4.0-alpha] — 2026-07-04 — the voice moves into the file (ALPHA)
+
+**Read-aloud is now fully baked in.** The packaged llamafile bundles a
+cosmocc-built TTS.cpp Kokoro server (8 MB APE) and the self-contained
+`Kokoro_no_espeak_Q4.gguf` (198 MB, phonemizer inside the GGUF), spawns it at
+startup and reverse-proxies it at `/tts` on the main port. The web UI's
+read-aloud controls light up on any machine from the single file — no Python,
+ONNX, espeak or sidecar. `LLAMAFILE_NO_VOICE=1` opts out; file grows ~206 MB.
+
+Also in this release (see “Voice interface (ALPHA)” in the README for usage):
+
+- **Talk-over barge-in**: speak while the model reads — playback pauses, your
+  utterance records and auto-sends on a ~1 s pause (browser energy VAD,
+  “+”-menu toggle).
+- **Spoken UI commands** via Gemma 4's native function-calling from audio:
+  stop / speed / read-again / new-chat / regenerate ride on barge-in sends.
+- Karaoke player refinements: scroll-respecting follow, per-message speed
+  controls, instant-start prefetch, re-render-proof word wrapping.
+- TTS.cpp cosmocc port notes upstreamable in `voice/ttscpp/README.md`
+  (C++23, static-init link order, generated header).
+
+**Alpha caveats**: English-only voices, simple energy VAD (use headphones),
+small literal command vocabulary, Apple-Silicon voice path untested,
+estimated (not phoneme-exact) word timing.
+
 ## [v0.3.0] — 2026-07-04 — universal artifact: hardware auto-tuning
 
 - **Hardware auto-tuning**: the packaged file now detects its platform at

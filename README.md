@@ -480,6 +480,103 @@ If you publish, note the model weights are Apache 2.0 with Google's
 [Gemma 4 license link](https://ai.google.dev/gemma/docs/gemma_4_license) on
 the card — mirror that in your model card.
 
+## Voice interface (ALPHA)
+
+> **Status: alpha.** The full voice loop — read-aloud, talk-over, spoken
+> commands — is baked into the packaged file and works end-to-end, but it is
+> not yet polished enough to rely on everywhere. Known rough edges are listed
+> at the end of this section. Feedback and recordings of failures are very
+> welcome.
+
+Everything below works **out of the single file** — the Kokoro voice (an
+8 MB TTS engine + 198 MB voice model) is bundled inside the llamafile and
+starts automatically. No Python, no ONNX runtime, no espeak, no setup.
+Disable it entirely with `LLAMAFILE_NO_VOICE=1`.
+
+### 🔈 Read-aloud with karaoke highlighting
+
+Every assistant reply gets a small player, placed under the *Reasoning*
+dropdown and above the answer:
+
+- **▶** starts reading (press again to pause). You can press it while the
+  reply is still streaming — reading starts within about a second and keeps
+  pace with generation.
+- **Every word highlights as it is spoken**, and the view gently follows —
+  but only while you stay near it. Scroll away and it leaves you alone;
+  scroll back (or click) and following resumes.
+- **Click any word** — ahead or behind — to jump the reading there.
+- **« 1.0× »** reading-speed controls (0.5–3.0×, instant, pitch-corrected;
+  click the number to reset). The setting persists.
+- The model's *reasoning is never read aloud* — only the answer.
+
+### 🎙 Ask by voice
+
+The microphone button next to **Send** records your question (button pulses
+red while recording; click again to stop) and attaches it as audio. Gemma 4
+hears the audio natively — no transcription step. Tip: speak clearly and
+close to the mic; very quiet recordings read as silence.
+
+### 🗣 Talk over the model (barge-in)
+
+Enable **“🗣 Talk-over barge-in”** in the composer's **+** menu (asks for
+microphone permission on first playback). Then, while the model is reading
+aloud, just start talking:
+
+1. the reading pauses as soon as you speak,
+2. your utterance records while you talk,
+3. when you pause (~1 second of silence), it is sent automatically.
+
+### 🎛 Spoken commands
+
+Barge-in utterances can *control the UI* — Gemma recognizes commands from
+your speech (via native function calling from audio) and the page executes
+them:
+
+| Say something like | Effect |
+|---|---|
+| “Stop.” / “Stop reading.” / “Stop talking.” | stops the read-aloud |
+| “Read faster.” / “Slow down a little.” | changes reading speed |
+| “Read that again from the start.” | replays the answer |
+| “Start a new conversation.” | new chat |
+| “Try that again.” | regenerates the last answer |
+
+Anything that isn't a command is treated as a normal question and answered.
+Commands only apply to speech captured through barge-in — typed messages are
+never affected.
+
+### Settings in the “+” menu
+
+- **0° Temperature zero** — deterministic answers (also the fastest mode).
+- **💭 Reason every turn** *(default on)* — makes the model think on every
+  message, not just the first (works around a stock-UI limitation); pairs
+  with *Exclude reasoning from context* so thinking never bloats the window.
+- **🗣 Talk-over barge-in** *(default off)* — see above.
+
+### For API users
+
+The baked voice is also reachable directly through the main port:
+
+```sh
+curl http://127.0.0.1:8080/tts/v1/audio/speech -H 'Content-Type: application/json' \
+  -d '{"input":"Hello from the baked-in voice.","voice":"af_heart"}' -o hello.wav
+curl http://127.0.0.1:8080/tts/v1/audio/voices    # list voices
+```
+
+### Known alpha limitations
+
+- **English-focused**: Kokoro's voices are English (US/UK); other languages
+  will sound wrong.
+- **Barge-in uses a simple energy VAD**: loud environments or speaker echo
+  (no headphones) can trigger or miss it. Headphones recommended.
+- **Command vocabulary is small** and literal-ish — “stop” works reliably,
+  “be quiet” does not.
+- **First playback on slow CPUs** can take a few seconds while the voice
+  model warms up; later requests are fast (the first sentence is prefetched).
+- **Apple Silicon is untested** for the baked voice path (the engine is
+  CPU-only and should work, but no one has verified it on a real Mac yet).
+- Word-highlight timing is estimated (proportional within each sentence),
+  not phoneme-exact.
+
 ## Hardware auto-tuning, --clear-all, and customizing baked settings
 
 **The packaged file tunes itself to your hardware.** At startup it detects the
