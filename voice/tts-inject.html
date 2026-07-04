@@ -1,5 +1,5 @@
 		<script>
-		// ── gemma4 voice+controls v12 ─────────────────────────────────────────
+		// ── gemma4 voice+controls v13 ─────────────────────────────────────────
 		// ONE playback engine, ONE trigger: the per-message player. The old
 		// composer auto-speak is gone — it was a second, independent Audio
 		// object reading captured content while the player read the DOM (which
@@ -35,18 +35,41 @@
 			let bargePending = false;
 			const VOICE_TOOLS = [
 				{ type: 'function', function: { name: 'stop_reading',
-					description: 'Stop the text-to-speech read-aloud playback immediately. Call when the user asks to stop, pause, be quiet, or silence the reading.',
+					description: 'Stop the voice/read-aloud immediately. Call for ANY request to stop, pause, be quiet, stop talking, stop speaking, stop reading, hush, or silence.',
 					parameters: { type: 'object', properties: {} } } },
 				{ type: 'function', function: { name: 'set_reading_speed',
-					description: 'Change the read-aloud playback speed. Call when the user asks to read faster or slower.',
+					description: 'Change the read-aloud speed. Call when the user asks to read faster or slower or to slow down / speed up.',
 					parameters: { type: 'object', properties: { speed: { type: 'number',
 						description: 'Playback rate multiplier between 0.5 and 3.0, 1.0 = normal. Faster = higher.' } }, required: ['speed'] } } },
+				{ type: 'function', function: { name: 'read_again',
+					description: 'Restart reading the current answer aloud from the beginning. Call when the user asks to read it again / repeat / from the start.',
+					parameters: { type: 'object', properties: {} } } },
+				{ type: 'function', function: { name: 'new_chat',
+					description: 'Start a new empty conversation. Call when the user asks to start over, clear the chat, or begin a new conversation.',
+					parameters: { type: 'object', properties: {} } } },
+				{ type: 'function', function: { name: 'regenerate',
+					description: 'Regenerate/redo the last answer. Call when the user asks to try that again or regenerate.',
+					parameters: { type: 'object', properties: {} } } },
 			];
+			const clickAria = label => {
+				const b = document.querySelector(`[aria-label="${label}"]`);
+				if (b) { b.click(); return true; } return false;
+			};
+			let lastCmdMsgEl = null;   // the message whose player triggered barge-in
 			function execVoiceTool(name, argStr) {
 				try {
 					const a = argStr ? JSON.parse(argStr) : {};
-					if (name === 'stop_reading') { stopAll(); console.log('[voice-cmd] stopped reading'); }
-					else if (name === 'set_reading_speed' && a.speed) { applyRate(a.speed); console.log('[voice-cmd] speed ->', a.speed); }
+					if (name === 'stop_reading') { stopAll(); console.log('[voice-cmd] stop'); }
+					else if (name === 'set_reading_speed' && a.speed) { applyRate(a.speed); console.log('[voice-cmd] speed', a.speed); }
+					else if (name === 'read_again') {
+						stopAll();
+						const el = lastCmdMsgEl || document.querySelector('[aria-label="Assistant message with actions"]:last-of-type');
+						const btn = el && el.querySelector('.g4v-play:not(.g4v-rate)');
+						if (btn) btn.click();
+						console.log('[voice-cmd] read again');
+					}
+					else if (name === 'new_chat') { clickAria('New chat'); console.log('[voice-cmd] new chat'); }
+					else if (name === 'regenerate') { clickAria('Regenerate'); console.log('[voice-cmd] regenerate'); }
 				} catch (e) { console.warn('[voice-cmd]', e); }
 			}
 			const rate = () => Math.min(3, Math.max(0.5, parseFloat(localStorage.getItem(LS_RATE) || '1') || 1));
