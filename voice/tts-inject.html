@@ -1,5 +1,5 @@
 		<script>
-		// ── gemma4 voice+controls v19 ─────────────────────────────────────────
+		// ── gemma4 voice+controls v20 ─────────────────────────────────────────
 		// ONE playback engine, ONE trigger: the per-message player. The old
 		// composer auto-speak is gone — it was a second, independent Audio
 		// object reading captured content while the player read the DOM (which
@@ -44,6 +44,31 @@
 			// audio. Tools ride ONLY on barge-in-originated sends; recognized calls
 			// are executed client-side when the stream ends.
 			let bargePending = false;
+			// Barge-in merge: interrupting a reply spoken < 10s = a REFINEMENT of
+			// the same question. Resend previous voice clip + new clip as ONE
+			// turn (300ms gap) and drop the interrupted pair from model context
+			// (display keeps it, dimmed) — the OpenAI-truncate pattern.
+			const MERGE_WINDOW_MS = 10000, MERGE_MAX_S = 60;
+			let lastUtterance = null;   // {pcm: Float32Array @16k, t}
+			let bargeCtx = null;        // {el, spokenMs} set when speech pauses a reply
+			let lastReplyMeta = null;   // {el, startedAt, endedAt} — survives engine teardown so a
+			                            // barge just AFTER a short reply finishes still merges
+			const interrupted = [];     // [{el}] assistant replies dropped from context
+			const partText = c => typeof c === 'string' ? c : Array.isArray(c) ? c.map(p => (p && p.text) || '').join('') : '';
+			function markInterrupted(el) {
+				if (!el || interrupted.some(x => x.el === el)) return;
+				interrupted.push({ el });
+				try {
+					el.classList.add('g4v-interrupted');
+					const ctl = el.querySelector('.g4v-ctl');
+					if (ctl && !ctl.querySelector('.g4v-intbadge')) {
+						const b = document.createElement('span');
+						b.className = 'g4v-intbadge';
+						b.textContent = '\u23f9 interrupted';
+						ctl.appendChild(b);
+					}
+				} catch {}
+			}
 			const VOICE_TOOLS = [
 				{ type: 'function', function: { name: 'stop_reading',
 					description: 'Stop the voice/read-aloud immediately. Call for ANY request to stop, pause, be quiet, stop talking, stop speaking, stop reading, hush, or silence.',
@@ -243,9 +268,28 @@
 			}
 
 			// ── request rewriting (0° and 💭 toggles) ─────────────────────────
-			function rewriteBody(txt) {
+			function rewriteBody(txt, primary) {
 				try {
 					const b = JSON.parse(txt);
+					if (Array.isArray(b.messages)) {
+						if (primary) {
+							// a typed turn ends any merge chain (previous clip is stale)
+							const lastU = [...b.messages].reverse().find(m => m.role === 'user');
+							if (lastU && !(Array.isArray(lastU.content) && lastU.content.some(x => x && x.type === 'input_audio')))
+								lastUtterance = null;
+						}
+						// interrupted pairs never reach the model again
+						for (const it of interrupted) {
+							const cap0 = capture.get(it.el);
+							const t = cap0 && cap0.text && cap0.text.trim();
+							if (!t) continue;
+							const key = t.slice(0, 80);
+							const i = b.messages.findIndex(m => m.role === 'assistant' &&
+								partText(m.content).trim().slice(0, 80) === key);
+							if (i > 0 && b.messages[i - 1].role === 'user') b.messages.splice(i - 1, 2);
+							else if (i >= 0) b.messages.splice(i, 1);
+						}
+					}
 					if (flag(LS_THINK, true)) {
 						b.chat_template_kwargs = { ...(b.chat_template_kwargs || {}), enable_thinking: true };
 						if (b.thinking_budget_tokens === 0) delete b.thinking_budget_tokens;
@@ -273,7 +317,7 @@
 						if (bb.chat_template_kwargs && bb.chat_template_kwargs.enable_thinking === false) primary = false;
 						if (bb.max_tokens === 0 || bb.max_tokens === 1) primary = false;   // pre-encode probes
 					} catch {}
-					init = { ...init, body: rewriteBody(init.body) };
+					init = { ...init, body: rewriteBody(init.body, primary) };
 				}
 				return orig.call(this, input, init).then(resp => {
 					try {
@@ -448,7 +492,7 @@
 				const detach = () => { for (const ev of navEvs) removeEventListener(ev, unfollow); removeEventListener('keydown', keyNav); };
 				const setIdle = () => { btn.textContent = '▶'; btn.classList.remove('g4v-spin'); clearHl(k); };
 				engine = {
-					btn,
+					btn, msgEl, startedAt: 0,
 					stop() { aborted = true; detach(); if (audio) try { audio.pause(); } catch {} setIdle(); },
 					pauseToggle() {
 						paused = !paused;
@@ -503,7 +547,7 @@
 							curAudio = audio;
 							audio.onended = res;
 							audio.onerror = res;               // skip broken audio, keep reading
-							audio.onplay = () => { if (!aborted && !paused) btn.textContent = '⏸'; btn.classList.remove('g4v-spin'); };
+							audio.onplay = () => { if (engine && engine.btn === btn && !engine.startedAt) { engine.startedAt = performance.now(); lastReplyMeta = { el: msgEl, startedAt: engine.startedAt, endedAt: 0 }; } if (!aborted && !paused) btn.textContent = '⏸'; btn.classList.remove('g4v-spin'); };
 							audio.ontimeupdate = () => {
 								if (aborted || !audio.duration) return;
 								const p = audio.currentTime / audio.duration;
@@ -527,6 +571,7 @@
 				}
 				detach();
 				if (!aborted) { if (engine && engine.btn === btn) engine = null; setIdle(); }
+				if (lastReplyMeta && lastReplyMeta.el === msgEl && !lastReplyMeta.endedAt) lastReplyMeta.endedAt = performance.now();
 			}
 
 			// live streaming read (message still generating): no highlights yet,
@@ -535,7 +580,7 @@
 				let aborted = false, paused = false, audio = null;
 				const setIdle = () => { btn.textContent = '▶'; btn.classList.remove('g4v-spin'); };
 				engine = {
-					btn,
+					btn, msgEl, startedAt: 0,
 					stop() { aborted = true; if (audio) try { audio.pause(); } catch {} setIdle(); },
 					pauseToggle() {
 						paused = !paused;
@@ -583,7 +628,7 @@
 						curAudio = audio;
 						audio.onended = res;
 						audio.onerror = res;                   // never kills the pipeline
-						audio.onplay = () => { if (!aborted && !paused) { btn.textContent = '⏸'; btn.classList.remove('g4v-spin'); } };
+						audio.onplay = () => { if (engine && engine.btn === btn && !engine.startedAt) { engine.startedAt = performance.now(); lastReplyMeta = { el: msgEl, startedAt: engine.startedAt, endedAt: 0 }; } if (!aborted && !paused) { btn.textContent = '⏸'; btn.classList.remove('g4v-spin'); } };
 						if (paused) {
 							const w = setInterval(() => {
 								if (aborted) { clearInterval(w); res(); }
@@ -593,6 +638,7 @@
 					});
 				}
 				if (!aborted) { if (engine && engine.btn === btn) engine = null; setIdle(); }
+				if (lastReplyMeta && lastReplyMeta.el === msgEl && !lastReplyMeta.endedAt) lastReplyMeta.endedAt = performance.now();
 			}
 
 			function buildControls(msgEl) {
@@ -708,7 +754,22 @@
 				let o = 0; for (const c of autoFrames) { flat.set(c, o); o += c.length; }
 				autoFrames = [];
 				if (total < 16000 * 0.4) { setAutoState('idle'); return; }   // too short: ignore
-				attachToUi(encodeWav(flat, 16000));
+				let toSend = flat;
+				if (bargeCtx && bargeCtx.el && bargeCtx.spokenMs < MERGE_WINDOW_MS && lastUtterance &&
+					(lastUtterance.pcm.length + flat.length) < 16000 * MERGE_MAX_S) {
+					const gap = new Float32Array(Math.round(16000 * 0.3));
+					toSend = new Float32Array(lastUtterance.pcm.length + gap.length + flat.length);
+					toSend.set(lastUtterance.pcm, 0);
+					toSend.set(gap, lastUtterance.pcm.length);
+					toSend.set(flat, lastUtterance.pcm.length + gap.length);
+					const stopBtn = document.querySelector('[aria-label="Stop generation"]');
+					if (stopBtn) stopBtn.click();
+					markInterrupted(bargeCtx.el);
+					console.log('[merge] previous clip + refinement resent as one turn');
+				}
+				bargeCtx = null;
+				lastUtterance = { pcm: toSend, t: performance.now() };
+				attachToUi(encodeWav(toSend, 16000));
 				bargePending = true;
 				autoFlash();
 				const trySend = (tries) => {
@@ -724,7 +785,7 @@
 			}
 
 			function cancelUtterance() {
-				autoFrames = [];
+				autoFrames = []; bargeCtx = null;
 				cancelAnimationFrame(cdRAF);
 				if (autoState !== 'off') setAutoState('idle');
 			}
@@ -758,7 +819,18 @@
 							if (speaking) { speechMs += frameMs; } else { speechMs = 0; noise = noise * 0.95 + rms * 0.05; }
 							if (speechMs > 200) {                    // real speech starts
 								autoFrames = []; speechMs = 0;
-								if (engine && engine.pauseToggle) engine.pauseToggle();   // yield the read-aloud
+								if (engine && engine.pauseToggle) {
+									bargeCtx = { el: engine.msgEl || null,
+										spokenMs: engine.startedAt ? (performance.now() - engine.startedAt) : Infinity };
+									engine.pauseToggle();            // yield the read-aloud
+									console.log('[barge] during playback, spoken', bargeCtx.spokenMs | 0, 'ms');
+								} else if (lastReplyMeta && lastReplyMeta.endedAt &&
+									(performance.now() - lastReplyMeta.endedAt) < 4000) {
+									// reply just finished — an immediate follow-up is still a refinement
+									bargeCtx = { el: lastReplyMeta.el,
+										spokenMs: lastReplyMeta.endedAt - lastReplyMeta.startedAt };
+									console.log('[barge] just-after-reply, spoken', bargeCtx.spokenMs | 0, 'ms');
+								}
 								setAutoState('hearing');
 							}
 						}
@@ -859,6 +931,8 @@
 				'.g4v-autocard{position:fixed;width:248px;background:#1b1f20;color:#ddd;border:1px solid #444;border-radius:8px;padding:8px 10px;font:12px system-ui;line-height:1.5;box-shadow:0 4px 14px #0008;display:none;z-index:99999;text-align:left}' +
 				'.g4v-autocard.g4v-open{display:block}' +
 				'.g4v-micwrap{position:relative;display:inline-flex;align-items:center;gap:2px}' +
+				'.g4v-interrupted{opacity:.55}' +
+				'.g4v-intbadge{font-size:11px;color:#c66;margin-left:6px;vertical-align:middle}' +
 				'.g4v-chev{width:18px !important;min-width:18px;padding:0 !important;font-size:11px;opacity:.7;position:relative;z-index:10}' +
 				'.g4v-micwrap{z-index:10}' +
 				'.g4v-opt{cursor:pointer;padding:4px 2px;border-radius:4px;white-space:pre}' +

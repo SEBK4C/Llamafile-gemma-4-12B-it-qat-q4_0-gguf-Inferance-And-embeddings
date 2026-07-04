@@ -45,6 +45,19 @@ FAKE_MIC = r"""
     return dest.stream;
   };
   window.__vbMic = {
+    // play real speech (decoded WAV) through the fake mic — lets tests hold
+    // actual conversations with the model instead of feeding it sine tones
+    async speakBuffer(b64) {
+      if (!gain) return false;
+      if (ctx.state !== 'running') await ctx.resume();
+      const bin = atob(b64), arr = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+      const buf = await ctx.decodeAudioData(arr.buffer);
+      const src = ctx.createBufferSource();
+      src.buffer = buf; src.connect(dest);
+      src.start();
+      return buf.duration;
+    },
     async speak(ms) {
       if (!gain) return false;
       if (ctx.state !== 'running') await ctx.resume();   // headless contexts start suspended
