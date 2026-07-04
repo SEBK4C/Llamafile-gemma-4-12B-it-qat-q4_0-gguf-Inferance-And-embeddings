@@ -57,7 +57,7 @@ else
     echo "note: $CUDA_DSO missing — packaging without bundled NVIDIA GPU support"
 fi
 if [ -f "$VOICE_APE" ] && [ -f "$VOICE_GGUF" ]; then
-    EXTRA="$EXTRA $VOICE_APE $VOICE_GGUF"
+    EXTRA="$EXTRA $VOICE_APE $VOICE_GGUF ${ROOT}/voice/voice-watchdog.sh"
 else
     echo "note: voice payload missing — packaging without baked read-aloud"
 fi

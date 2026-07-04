@@ -175,7 +175,6 @@ struct simple_response_map {
             if (!running) {
                 return;
             }
-            auto now = std::chrono::steady_clock::now();
             std::vector<int> deletable;
             for (auto const& [key, task] : completed) {
                 if (task->timed_out(cleanup_timeout)) {
@@ -184,6 +183,28 @@ struct simple_response_map {
             }
             for (auto const id : deletable) {
                 completed.erase(id);
+            }
+            // size stays > 100 until entries age past cleanup_timeout, so the
+            // predicate above returns immediately and this loop used to SPIN
+            // FOREVER HOLDING rw_mutex — every push()/get() on the map blocked
+            // and the whole server wedged (listening, never answering). When
+            // nothing was deletable, sleep off-lock; and never let the map
+            // grow without bound (oldest entries were consumed long ago).
+            if (completed.size() > 256) {
+                std::vector<std::pair<std::chrono::time_point<std::chrono::steady_clock>, int>> by_age;
+                for (auto const& [key, task] : completed) {
+                    by_age.push_back({task->time, key});
+                }
+                std::sort(by_age.begin(), by_age.end());
+                size_t excess = completed.size() - 256;
+                for (size_t i = 0; i < excess; i++) {
+                    completed.erase(by_age[i].second);
+                }
+            }
+            if (deletable.empty()) {
+                lock.unlock();
+                std::this_thread::sleep_for(std::chrono::seconds(5));
+                lock.lock();
             }
         }
     }
@@ -255,6 +276,11 @@ struct worker {
 
     const void process_task(struct simple_server_task * task) {
         if (task->timed_out(task_timeout)) {
+            // MUST answer: the http thread is blocked in response_map->get(id)
+            // and a silently dropped task leaks that thread forever
+            task->success = false;
+            task->message = "task expired in queue";
+            response_map->push(task);
             return;
         }
         tts_response * data = nullptr;
