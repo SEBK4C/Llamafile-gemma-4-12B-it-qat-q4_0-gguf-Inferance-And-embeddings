@@ -1,5 +1,5 @@
 		<script>
-		// ── gemma4 voice+controls v20 ─────────────────────────────────────────
+		// ── gemma4 voice+controls v21 ─────────────────────────────────────────
 		// ONE playback engine, ONE trigger: the per-message player. The old
 		// composer auto-speak is gone — it was a second, independent Audio
 		// object reading captured content while the player read the DOM (which
@@ -299,6 +299,11 @@
 						bargePending = false;
 						b.tools = [...VOICE_TOOLS, ...(b.tools || [])];
 						b.tool_choice = 'auto';
+						// spoken conversation wants snappy first words: reasoning costs
+						// 2-4s before the first content token. Voice turns skip it;
+						// typed turns keep the user's thinking setting.
+						b.chat_template_kwargs = { ...(b.chat_template_kwargs || {}), enable_thinking: false };
+						delete b.thinking_budget_tokens;
 					}
 					return JSON.stringify(b);
 				} catch { return txt; }
@@ -312,9 +317,10 @@
 				if (init && typeof init.body === 'string') {
 					try {
 						const bb = JSON.parse(init.body);
-						// housekeeping calls (conversation titles etc.) explicitly disable
-						// thinking and must not hijack capture/auto-speak
-						if (bb.chat_template_kwargs && bb.chat_template_kwargs.enable_thinking === false) primary = false;
+						// genuine UI chat sends stream with per-token timings; housekeeping
+						// (title-gen, pre-encode probes) doesn't — keying on enable_thinking
+						// broke capture whenever thinking was off
+						if (bb.stream !== true || bb.timings_per_token !== true) primary = false;
 						if (bb.max_tokens === 0 || bb.max_tokens === 1) primary = false;   // pre-encode probes
 					} catch {}
 					init = { ...init, body: rewriteBody(init.body, primary) };

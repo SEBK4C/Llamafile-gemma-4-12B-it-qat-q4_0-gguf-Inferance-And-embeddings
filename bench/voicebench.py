@@ -163,15 +163,11 @@ async def main():
                 await page.evaluate("document.querySelectorAll('audio').forEach(a=>{try{a.pause()}catch{}})")
             await page.screenshot(path=str(out / f"turn{i+1}.png"))
 
-        # ── barge-in stop latency (turn 3 is still speaking now) ──
+        # ── barge-in stop latency (turn 3 just started speaking: its first
+        # chunk is ≥10 words ≈ 4s of audio, so 300ms in is always mid-speech) ──
         barge_ms = None
         try:
-            # wait until playback is actually running, then speak over it
-            for _ in range(100):
-                if await page.evaluate("[...document.querySelectorAll('audio')].some(a => !a.paused && a.currentTime > 0)"):
-                    break
-                await page.wait_for_timeout(100)
-            await page.wait_for_timeout(500)
+            await page.wait_for_timeout(300)
             await page.evaluate("window.__vbCtxs.forEach(c => { try { c.resume() } catch {} })")
             ok = await page.evaluate("window.__vbMic && window.__vbMic.ready()")
             if ok:
@@ -188,6 +184,44 @@ async def main():
                 errors.append("barge: fake mic never initialized (VAD not armed?)")
         except Exception as ex:
             errors.append(f"barge: {ex}")
+        # ── voice-turn first audio: a clean SPOKEN question through the fake
+        # mic (real VAD → auto-send → auto-speak); measures the actual
+        # conversational-loop latency, distinct from typed-turn latency
+        voice_ms = None
+        try:
+            def on_req(req):
+                if "/chat/completions" in req.url and req.post_data and '"input_audio"' in req.post_data:
+                    asyncio.ensure_future(page.evaluate("if (!window.__vbReqT) window.__vbReqT = performance.now()"))
+            page.on("request", on_req)
+            # let the barge fallout settle: generation idle, playback stopped
+            for _ in range(360):
+                busy = await page.locator('[aria-label="Stop generation"]').count()
+                if not busy:
+                    break
+                await page.wait_for_timeout(500)
+            await page.wait_for_timeout(6000)
+            await page.evaluate("window.__vbEvents.length = 0; window.__vbReqT = 0")
+            body = json.dumps({"input": "What color is the sky on a clear day? Answer in one short sentence.", "voice": "af_heart"}).encode()
+            wav64 = base64.b64encode(urllib.request.urlopen(urllib.request.Request(
+                api + "/tts/v1/audio/speech", body,
+                {"Content-Type": "application/json"}), timeout=300).read()).decode()
+            await page.evaluate(f"window.__vbMic.speakBuffer('{wav64}')")
+            t0 = 0
+            for _ in range(600):   # utterance + countdown + send
+                t0 = await page.evaluate("window.__vbReqT")
+                if t0:
+                    break
+                await page.wait_for_timeout(100)
+            if t0:
+                for _ in range(600):
+                    evs = await page.evaluate("window.__vbEvents")
+                    pl = [e for e in evs if e["ev"] == "playing" and e["t"] > t0]
+                    if pl:
+                        voice_ms = round(pl[0]["t"] - t0)
+                        break
+                    await page.wait_for_timeout(100)
+        except Exception as ex:
+            errors.append(f"voice-turn: {ex}")
         await page.screenshot(path=str(out / "final.png"))
         await b.close()
 
@@ -215,6 +249,7 @@ async def main():
         print(f"first_audio_ms_t{i+1}: {m}")
     print(f"p50_first_audio_ms: {p50}")
     print(f"barge_stop_ms: {bm}")
+    print(f"voice_first_audio_ms: {voice_ms if voice_ms is not None else 60000}")
     print(f"transcript_similarity: {round(sim, 2)}")
     print(f"voice_score: {score}")
     if errors:
