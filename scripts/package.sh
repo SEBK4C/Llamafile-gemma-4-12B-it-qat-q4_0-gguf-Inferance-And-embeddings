@@ -27,6 +27,11 @@ DRAFTER="${ROOT}/models/mtp-gemma-4-12b-it-qat-q4_0.gguf"
 # Build it with: vendor/llamafile/llamafile/cuda.sh --minimize-size \
 #   --output models/ggml-cuda.so
 CUDA_DSO="${ROOT}/models/ggml-cuda.so"
+# Baked voice (optional): TTS.cpp Kokoro server APE + self-contained GGUF.
+# When present the packaged server spawns it and proxies /tts, giving the
+# web UI read-aloud with no sidecar. See voice/BAKED-VOICE.md.
+VOICE_APE="${ROOT}/models/tts-server.ape"
+VOICE_GGUF="${ROOT}/models/kokoro.gguf"
 OUT="${ROOT}/dist/gemma4-server.llamafile"
 
 for f in "${ROOT}/bin/llamafile" "${ROOT}/bin/zipalign"; do
@@ -50,6 +55,11 @@ if [ -f "$CUDA_DSO" ]; then
     EXTRA="$EXTRA $CUDA_DSO"
 else
     echo "note: $CUDA_DSO missing — packaging without bundled NVIDIA GPU support"
+fi
+if [ -f "$VOICE_APE" ] && [ -f "$VOICE_GGUF" ]; then
+    EXTRA="$EXTRA $VOICE_APE $VOICE_GGUF"
+else
+    echo "note: voice payload missing — packaging without baked read-aloud"
 fi
 "${ROOT}/bin/zipalign" -j0 "$OUT" "$MODEL" "$MMPROJ" $EXTRA "${TMP}/.args"
 chmod +x "$OUT"

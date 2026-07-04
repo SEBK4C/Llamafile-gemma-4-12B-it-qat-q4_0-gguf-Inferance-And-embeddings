@@ -1,8 +1,8 @@
 diff --git a/tools/server/server-http.cpp b/tools/server/server-http.cpp
-index 34a20c9..7ba47ed 100644
+index 34a20c9..ae65d1e 100644
 --- a/tools/server/server-http.cpp
 +++ b/tools/server/server-http.cpp
-@@ -5,6 +5,12 @@
+@@ -5,6 +5,13 @@
  
  #include <cpp-httplib/httplib.h>
  
@@ -10,12 +10,13 @@ index 34a20c9..7ba47ed 100644
 +#include <unistd.h>
 +#ifdef COSMOCC
 +#include <cosmo.h>
++extern "C" int llamafile_voice_start(void);
 +#endif
 +
  #include <functional>
  #include <future>
  #include <memory>
-@@ -376,6 +382,45 @@ bool server_http_context::start() {
+@@ -376,10 +383,75 @@ bool server_http_context::start() {
      }
  
      if (!was_bound) {
@@ -61,3 +62,33 @@ index 34a20c9..7ba47ed 100644
          SRV_ERR("couldn't bind HTTP server socket, hostname: %s, port: %d\n", hostname.c_str(), port);
          return false;
      }
+ 
++#ifdef COSMOCC
++    // Baked-in voice: spawn the bundled Kokoro TTS server (if this build
++    // carries one) and reverse-proxy it at /tts so the web UI's read-aloud
++    // probe lights up with zero configuration.
++    {
++        const int vport = llamafile_voice_start();
++        if (vport > 0) {
++            auto fwd = [vport](const httplib::Request & req, httplib::Response & res) {
++                httplib::Client up("127.0.0.1", vport);
++                up.set_connection_timeout(10, 0);
++                up.set_read_timeout(120, 0);
++                std::string path = req.path.substr(4); // strip "/tts"
++                if (path.empty()) path = "/";
++                httplib::Result r = req.method == "POST"
++                    ? up.Post(path, req.body, req.get_header_value("Content-Type").c_str())
++                    : up.Get(path);
++                if (!r) { res.status = 502; res.set_content("{\"error\":\"voice backend not ready\"}", "application/json"); return; }
++                res.status = r->status;
++                res.set_content(r->body, r->get_header_value("Content-Type").empty() ? "application/octet-stream" : r->get_header_value("Content-Type").c_str());
++            };
++            srv->Get("/tts/(.*)", fwd);
++            srv->Post("/tts/(.*)", fwd);
++        }
++    }
++#endif
++
+     // run the HTTP server in a thread
+     thread = std::thread([this] { pimpl->srv->listen_after_bind(); });
+     srv->wait_until_ready();
