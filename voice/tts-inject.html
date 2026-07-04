@@ -1,5 +1,5 @@
 		<script>
-		// ── gemma4 voice+controls v22 ─────────────────────────────────────────
+		// ── gemma4 voice+controls v23 ─────────────────────────────────────────
 		// ONE playback engine, ONE trigger: the per-message player. The old
 		// composer auto-speak is gone — it was a second, independent Audio
 		// object reading captured content while the player read the DOM (which
@@ -758,12 +758,76 @@
 				setTimeout(() => autoBtnRef && autoBtnRef.classList.remove('g4v-flash'), 350);
 			}
 
+			// Gemma reads audio with mean level ≲ -35dB as "no audio" and answers
+			// "I do not know" — browser mics are often that quiet. Peak-normalize
+			// every clip before it is sent.
+			function normalizePcm(pcm) {
+				// RMS-target gain (speech-active frames only): peak-norm alone
+				// leaves sparse speech too close to the deafness line. Target the
+				// active RMS at ~0.07, capped so the peak stays below 0.95.
+				const F = 512;
+				const n = Math.floor(pcm.length / F);
+				let peak = 0;
+				const rms = [];
+				for (let i = 0; i < n; i++) {
+					let s = 0;
+					for (let j = i * F; j < (i + 1) * F; j++) { const v = pcm[j]; s += v * v; const a = Math.abs(v); if (a > peak) peak = a; }
+					rms.push(Math.sqrt(s / F));
+				}
+				if (peak < 1e-4 || !n) return pcm;
+				const sorted = [...rms].sort((a, b) => a - b);
+				const floor = Math.max(1e-4, sorted[Math.floor(n * 0.2)]);
+				const act = rms.filter(r => r > floor * 3);
+				let mean = 0; for (const r of act) mean += r; mean /= (act.length || 1);
+				const g = Math.min(mean > 1e-4 ? 0.07 / mean : 1, 0.95 / peak, 24);
+				if (g <= 1.05) return pcm;
+				const out = new Float32Array(pcm.length);
+				for (let i = 0; i < pcm.length; i++) out[i] = pcm[i] * g;
+				return out;
+			}
+
+			// Utterance quality: speech is BURSTY at syllable rate — its frame
+			// energy modulates strongly around the mean — while fans/hum are
+			// steady and clicks are momentary. Score by active-speech duration
+			// and modulation depth over 32ms frames vs the clip's own noise floor.
+			function scoreUtterance(pcm) {
+				const F = 512;
+				const n = Math.floor(pcm.length / F);
+				if (!n) return { activeMs: 0, mod: 0 };
+				const rms = new Array(n);
+				for (let i = 0; i < n; i++) {
+					let s = 0;
+					for (let j = i * F; j < (i + 1) * F; j++) s += pcm[j] * pcm[j];
+					rms[i] = Math.sqrt(s / F);
+				}
+				const sorted = [...rms].sort((a, b) => a - b);
+				const floor = Math.max(1e-4, sorted[Math.floor(n * 0.2)]);
+				const act = rms.filter(r => r > floor * 3);
+				const activeMs = act.length * 32;
+				let mean = 0; for (const r of act) mean += r; mean /= (act.length || 1);
+				let sd = 0; for (const r of act) sd += (r - mean) * (r - mean);
+				sd = Math.sqrt(sd / (act.length || 1));
+				return { activeMs, mod: mean ? sd / mean : 0 };
+			}
+			let keepFrames = false;   // low-information clip retained: next speech APPENDS
+
 			function autoSend() {
 				const total = autoFrames.reduce((a, c) => a + c.length, 0);
 				const flat = new Float32Array(total);
 				let o = 0; for (const c of autoFrames) { flat.set(c, o); o += c.length; }
-				autoFrames = [];
-				if (total < 16000 * 0.4) { setAutoState('idle'); return; }   // too short: ignore
+				if (total < 16000 * 0.4) { autoFrames = []; setAutoState('idle'); return; }   // too short: ignore
+				const q = scoreUtterance(flat);
+				if (q.activeMs < 500 || q.mod < 0.25) {   // real speech ALWAYS modulates; steady hum never sends
+					// background noise or a fragment with too little to answer:
+					// hold it and keep listening — the next speech appends to it
+					keepFrames = true;
+					while (autoFrames.reduce((a, c) => a + c.length, 0) > 16000 * 30) autoFrames.shift();
+					console.log('[quality] held clip: activeMs=' + q.activeMs + ' mod=' + q.mod.toFixed(2));
+					setAutoState('idle');
+					if (autoStatusRef) autoStatusRef.textContent = 'Status: didn’t sound like enough speech — still listening';
+					return;
+				}
+				autoFrames = []; keepFrames = false;
 				let toSend = flat;
 				if (bargeCtx && bargeCtx.el && bargeCtx.spokenMs < MERGE_WINDOW_MS && lastUtterance &&
 					(lastUtterance.pcm.length + flat.length) < 16000 * MERGE_MAX_S) {
@@ -778,6 +842,7 @@
 					console.log('[merge] previous clip + refinement resent as one turn');
 				}
 				bargeCtx = null;
+				toSend = normalizePcm(toSend);
 				lastUtterance = { pcm: toSend, t: performance.now() };
 				attachToUi(encodeWav(toSend, 16000));
 				bargePending = true;
@@ -828,7 +893,9 @@
 						if (autoState === 'idle') {
 							if (speaking) { speechMs += frameMs; } else { speechMs = 0; noise = noise * 0.95 + rms * 0.05; }
 							if (speechMs > 200) {                    // real speech starts
-								autoFrames = []; speechMs = 0;
+								if (!keepFrames) autoFrames = [];    // held low-info clip: append to it
+								keepFrames = false;
+								speechMs = 0;
 								if (engine && engine.pauseToggle) {
 									bargeCtx = { el: engine.msgEl || null,
 										spokenMs: engine.startedAt ? (performance.now() - engine.startedAt) : Infinity };
@@ -903,7 +970,7 @@
 				const total = r.samples.reduce((a, c) => a + c.length, 0);
 				const flat = new Float32Array(total); let o = 0;
 				for (const c of r.samples) { flat.set(c, o); o += c.length; }
-				return encodeWav(flat, 16000);
+				return encodeWav(normalizePcm(flat), 16000);
 			}
 			function attachToUi(blob) {
 				const inp = document.querySelector('input[type="file"]');
