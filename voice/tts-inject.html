@@ -1,5 +1,5 @@
 		<script>
-		// ── gemma4 voice+controls v15 ─────────────────────────────────────────
+		// ── gemma4 voice+controls v16 ─────────────────────────────────────────
 		// ONE playback engine, ONE trigger: the per-message player. The old
 		// composer auto-speak is gone — it was a second, independent Audio
 		// object reading captured content while the player read the DOM (which
@@ -24,7 +24,10 @@
 			// once; without it we render no read-aloud controls (mic stays — audio
 			// INPUT is part of the model itself).
 			let ttsUp = null;
-			fetch('/tts/health').then(r => { ttsUp = r.ok; }).catch(() => { ttsUp = false; });
+			fetch('/tts/health').then(r => {
+				ttsUp = r.ok;
+				if (r.ok) synth('Ready.').catch(() => {});   // warm the voice model now, not on first play
+			}).catch(() => { ttsUp = false; });
 			const LS_T0 = 'gemma-temp0';
 			const LS_THINK = 'gemma-think-always';
 			const LS_RATE = 'gemma-tts-rate';
@@ -119,12 +122,27 @@
 				body: JSON.stringify({ input: txt, voice: 'af_heart' })
 			}).then(r => r.ok ? r.blob() : null).catch(() => null);
 
+			// Prewarm: as soon as a reply completes, build its karaoke and start
+			// synthesizing sentence 0 into the audio cache. Stored as a PROMISE so a
+			// play begun mid-synthesis awaits the same request instead of duplicating.
+			function prewarmKaraoke(el, capText) {
+				if (ttsUp !== true || !el) return;
+				try {
+					const k = buildKaraoke(el, capText || '');
+					if (!k.sents.length) return;
+					const t = sanitize(k.sents[0].map(i => k.words[i].text).join(' '));
+					if (!t || k.audio.has(t)) return;
+					const p = synth(t).then(b => { k.audio.set(t, b); return b; }).catch(() => null);
+					k.audio.set(t, p);
+				} catch (e) { console.warn('[prewarm]', e); }
+			}
+
 			// Prefetch the first chunk's audio the moment a message finishes, so
 			// clicking ▶ plays from cache (<0.2s) instead of waiting on synth (~0.5-1.5s).
 			function prefetchFirst(el, text) {
 				if (ttsUp !== true) return;
 				if (!el || firstBlob.has(el)) return;
-				const raw = firstChunkText(text, CHUNK0);   // un-sanitized slice of cap.text
+				const raw = firstChunkText(text, 1);   // exactly the first sentence (matches karaoke sentence 0)
 				const spoken = sanitize(raw);
 				if (!spoken) return;
 				firstBlob.set(el, null); // reserve slot to avoid double-fetch
@@ -138,9 +156,9 @@
 				return all.length ? all[all.length - 1] : null;
 			};
 
-			async function harvest(stream) {
-				const cap = { el: null, text: '', done: false, notify: null };
-				live = cap;
+			async function harvest(stream, primary) {
+				const cap = { el: null, text: '', done: false, notify: null, primary: !!primary };
+				if (primary) live = cap;
 				const dec = new TextDecoder(); const rd = stream.getReader();
 				let buf = '';
 				for (;;) {
@@ -167,7 +185,7 @@
 							}
 							if (d.content) {
 								cap.text += d.content;
-								if (!cap.el) {
+								if (!cap.el && cap.primary) {
 									const el = lastMsgEl();
 									if (el) { cap.el = el; capture.set(el, cap); }
 								}
@@ -177,20 +195,22 @@
 					}
 				}
 				cap.done = true;
+				if (!cap.primary) return;
 				if (cap.tc) for (const k of Object.values(cap.tc)) execVoiceTool(k.name, k.args);
 				// auto-speak replies: hands-free conversation loop
-				if (flag(LS_SPEAK, false) && !Object.keys(cap.tc || {}).length) {
+				if (flag(LS_SPEAK, false) && cap.text.trim().length > 1 && !Object.keys(cap.tc || {}).length) {
 					setTimeout(() => {
-						if (engine) return;                 // something already playing
+						if (!flag(LS_SPEAK, false)) return;
+						stopAll();                          // newest reply wins over an ongoing read
 						const el = cap.el || lastMsgEl();
 						const b = el && el.querySelector('.g4v-play:not(.g4v-rate)');
 						if (b) b.click();
-					}, 900);
+					}, 300);
 				}
 				if (!cap.el) {
-					setTimeout(() => { const el = lastMsgEl(); if (el) { cap.el = el; capture.set(el, cap); prefetchFirst(el, cap.text); } }, 400);
+					setTimeout(() => { const el = lastMsgEl(); if (el) { cap.el = el; capture.set(el, cap); prewarmKaraoke(el, cap.text); } }, 400);
 				} else {
-					prefetchFirst(cap.el, cap.text);   // warm the first chunk for instant ▶
+					setTimeout(() => prewarmKaraoke(cap.el, cap.text), 250);   // sentence-0 audio ready before ▶
 				}
 				if (cap.notify) cap.notify();
 				if (live === cap) setTimeout(() => { if (live === cap) live = null; }, 500);
@@ -219,13 +239,23 @@
 			window.fetch = function (input, init) {
 				const url = typeof input === 'string' ? input : (input && input.url) || '';
 				if (!/\/chat\/completions/.test(url)) return orig.apply(this, arguments);
-				if (init && typeof init.body === 'string') init = { ...init, body: rewriteBody(init.body) };
+				let primary = true;
+				if (init && typeof init.body === 'string') {
+					try {
+						const bb = JSON.parse(init.body);
+						// housekeeping calls (conversation titles etc.) explicitly disable
+						// thinking and must not hijack capture/auto-speak
+						if (bb.chat_template_kwargs && bb.chat_template_kwargs.enable_thinking === false) primary = false;
+						if (bb.max_tokens === 0 || bb.max_tokens === 1) primary = false;   // pre-encode probes
+					} catch {}
+					init = { ...init, body: rewriteBody(init.body) };
+				}
 				return orig.call(this, input, init).then(resp => {
 					try {
 						const ct = resp.headers.get('content-type') || '';
 						if (resp.ok && resp.body && ct.includes('text/event-stream')) {
 							const [a, b] = resp.body.tee();
-							harvest(b);
+							harvest(b, primary);
 							return new Response(a, resp);
 						}
 						if (resp.ok && ct.includes('application/json')) {
@@ -367,7 +397,15 @@
 				const fetchSent = (si, w0) => {
 					const t = sentText(si, w0);
 					if (!t) return Promise.resolve(null);
-					if (k.audio.has(t)) return Promise.resolve(k.audio.get(t));
+					if (k.audio.has(t)) return Promise.resolve(k.audio.get(t));   // Blob or in-flight Promise — await flattens
+					// prefetched first chunk: if it covers the start of this sentence, use it
+					if (si === fromSent && w0 === fromWord) {
+						const pf = firstBlob.get(msgEl);
+						if (pf && pf.blob && Math.abs(t.length - pf.spoken.length) < Math.max(12, t.length * 0.15) && t.slice(0, 24) === pf.spoken.slice(0, 24)) {
+							k.audio.set(t, pf.blob);
+							return Promise.resolve(pf.blob);
+						}
+					}
 					return synth(t).then(b => { k.audio.set(t, b); return b; }).catch(() => null);
 				};
 				let pending = fetchSent(fromSent, fromWord);
@@ -751,7 +789,7 @@
 				'.g4v-auto.g4v-hearing{box-shadow:0 0 0 2px #e53935}' +
 				'@keyframes g4vflash{0%{box-shadow:0 0 0 6px #e5393500}40%{box-shadow:0 0 0 4px #e53935cc}100%{box-shadow:0 0 0 8px #e5393500}}' +
 				'.g4v-auto.g4v-flash{animation:g4vflash .35s ease-out}' +
-				'.g4v-autocard{position:absolute;bottom:120%;right:0;width:248px;background:#1b1f20;color:#ddd;border:1px solid #444;border-radius:8px;padding:8px 10px;font:12px system-ui;line-height:1.5;box-shadow:0 4px 14px #0008;display:none;z-index:99999;text-align:left}' +
+				'.g4v-autocard{position:fixed;width:248px;background:#1b1f20;color:#ddd;border:1px solid #444;border-radius:8px;padding:8px 10px;font:12px system-ui;line-height:1.5;box-shadow:0 4px 14px #0008;display:none;z-index:99999;text-align:left}' +
 				'.g4v-autocard.g4v-open{display:block}' +
 				'.g4v-micwrap{position:relative;display:inline-flex;align-items:center;gap:2px}' +
 				'.g4v-chev{width:18px !important;min-width:18px;padding:0 !important;font-size:11px;opacity:.7;position:relative;z-index:10}' +
@@ -834,12 +872,29 @@
 				menuEl.querySelector('[data-k="speak"]').onclick = () => {
 					setFlag(LS_SPEAK, !flag(LS_SPEAK, false)); paintAuto();
 				};
-				chev.onclick = e => { e.stopPropagation(); menuEl.classList.toggle('g4v-open'); paintAuto(); };
+				chev.onclick = e => {
+					e.stopPropagation();
+					const opening = !menuEl.classList.contains('g4v-open');
+					menuEl.classList.toggle('g4v-open');
+					if (opening) {
+						// portal: fixed-position above the button, clamped to the viewport,
+						// so it never covers the composer textarea or gets clipped
+						const r = chev.getBoundingClientRect();
+						const form = chev.closest('form');
+						const fr = form ? form.getBoundingClientRect() : r;
+						menuEl.style.left = Math.max(8, Math.min(window.innerWidth - 264, r.right - 248)) + 'px';
+						menuEl.style.top = '';
+						menuEl.style.bottom = (window.innerHeight - fr.top + 8) + 'px';   // clear of the whole composer
+					}
+					paintAuto();
+				};
 				document.addEventListener('click', e => {
-					if (!wrapM.contains(e.target)) menuEl.classList.remove('g4v-open');
+					if (!wrapM.contains(e.target) && !menuEl.contains(e.target)) menuEl.classList.remove('g4v-open');
 				});
+				addEventListener('resize', () => menuEl.classList.remove('g4v-open'));
 				paintAuto();
-				wrapM.append(mic, chev, menuEl);
+				wrapM.append(mic, chev);
+				document.body.appendChild(menuEl);   // outside the composer DOM entirely
 				if (flag(LS_AUTO, false)) autoStart();   // resume across reloads
 
 				send.parentElement.insertBefore(wrapM, send);   // [🎙⌄][Send]
