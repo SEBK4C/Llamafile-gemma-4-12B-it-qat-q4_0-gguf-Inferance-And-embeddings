@@ -518,8 +518,10 @@ close to the mic; very quiet recordings read as silence.
 
 ### 🗣 Auto voice mode (hands-free)
 
-Click the **auto-listen button** next to the microphone (a mic with a dot
-that turns red when armed). Once on, it listens continuously:
+Open the **⌄ menu next to the microphone button** and enable **Auto listen**
+(the mic's dot turns red when armed). The same menu has **Auto-speak
+replies** — turn both on for a hands-free back-and-forth conversation: you
+talk, it answers out loud, you talk again. Once listening is on:
 
 1. start talking and it records (the button rings red while it hears you); if
    the model is reading aloud, it pauses so you can interrupt;
@@ -529,11 +531,12 @@ that turns red when armed). Once on, it listens continuously:
 3. at the end of the countdown the recording is sent automatically (held until
    the model is free if it's still answering).
 
-**Hover the button** for the list of available commands and a live status
-line (listening / hearing you / sending in 1.4s), plus a **sensitivity
-slider** — turn it down in noisy rooms, up if it misses you. **Click during
-the countdown to cancel** that utterance; click while idle to turn auto mode
-off. Headphones recommended so playback doesn't feed back into the mic.
+The ⌄ menu also shows the **list of voice commands**, a **live status line**
+(listening / hearing you / sending in 1.4s), and a **sensitivity slider** —
+turn it down in noisy rooms, up if it misses you. **Click the mic during the
+countdown to cancel** that utterance. The mic button itself still does
+manual push-to-record. Headphones strongly recommended with auto-speak, so
+the voice doesn't feed back into the mic.
 
 ### 🎛 Spoken commands
 

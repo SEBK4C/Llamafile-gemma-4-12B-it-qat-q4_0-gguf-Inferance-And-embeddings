@@ -1,5 +1,5 @@
 		<script>
-		// ── gemma4 voice+controls v14 ─────────────────────────────────────────
+		// ── gemma4 voice+controls v15 ─────────────────────────────────────────
 		// ONE playback engine, ONE trigger: the per-message player. The old
 		// composer auto-speak is gone — it was a second, independent Audio
 		// object reading captured content while the player read the DOM (which
@@ -30,6 +30,7 @@
 			const LS_RATE = 'gemma-tts-rate';
 			const LS_AUTO = 'gemma-automode';   // always-listening voice mode
 			const LS_SENS = 'gemma-vad-sens';   // VAD sensitivity multiplier (2..8)
+			const LS_SPEAK = 'gemma-autospeak'; // read every reply aloud automatically
 			const SEND_DELAY = 2000;            // ms of silence before an utterance sends
 			const sens = () => { const v = parseFloat(localStorage.getItem(LS_SENS) || '4'); return isFinite(v) ? Math.min(8, Math.max(2, v)) : 4; };
 			// Stage 2: spoken UI commands via Gemma's native function-calling from
@@ -177,6 +178,15 @@
 				}
 				cap.done = true;
 				if (cap.tc) for (const k of Object.values(cap.tc)) execVoiceTool(k.name, k.args);
+				// auto-speak replies: hands-free conversation loop
+				if (flag(LS_SPEAK, false) && !Object.keys(cap.tc || {}).length) {
+					setTimeout(() => {
+						if (engine) return;                 // something already playing
+						const el = cap.el || lastMsgEl();
+						const b = el && el.querySelector('.g4v-play:not(.g4v-rate)');
+						if (b) b.click();
+					}, 900);
+				}
 				if (!cap.el) {
 					setTimeout(() => { const el = lastMsgEl(); if (el) { cap.el = el; capture.set(el, cap); prefetchFirst(el, cap.text); } }, 400);
 				} else {
@@ -633,6 +643,7 @@
 					let noise = 0.003, speechMs = 0;
 					setAutoState('idle');
 					node.onaudioprocess = e => {
+						if (rec) return;                    // manual recording in progress
 						const d = e.inputBuffer.getChannelData(0);
 						let s = 0; for (let i = 0; i < d.length; i++) s += d[i] * d[i];
 						const rms = Math.sqrt(s / d.length);
@@ -730,7 +741,6 @@
 				'.g4v-ctl{display:flex;align-items:center;gap:5px}' +
 				'.g4v-rate{width:20px;height:20px;font-size:12px}' +
 				'.g4v-ratelbl{font:11px system-ui;color:#888;cursor:pointer;min-width:30px;text-align:center}' +
-				'.g4v-autowrap{position:relative;display:inline-flex}' +
 				'.g4v-auto{position:relative;--deg:0deg}' +
 				'.g4v-auto .g4v-autoglyph{position:relative;z-index:1}' +
 				'.g4v-auto .g4v-autodot{position:absolute;top:1px;right:2px;font-size:8px;color:#888;z-index:2}' +
@@ -741,8 +751,14 @@
 				'.g4v-auto.g4v-hearing{box-shadow:0 0 0 2px #e53935}' +
 				'@keyframes g4vflash{0%{box-shadow:0 0 0 6px #e5393500}40%{box-shadow:0 0 0 4px #e53935cc}100%{box-shadow:0 0 0 8px #e5393500}}' +
 				'.g4v-auto.g4v-flash{animation:g4vflash .35s ease-out}' +
-				'.g4v-autocard{position:absolute;bottom:120%;left:50%;transform:translateX(-50%);width:250px;background:#1b1f20;color:#ddd;border:1px solid #444;border-radius:8px;padding:8px 10px;font:11px system-ui;line-height:1.4;box-shadow:0 4px 14px #0008;opacity:0;visibility:hidden;transition:opacity .12s;z-index:99999}' +
-				'.g4v-autowrap:hover .g4v-autocard{opacity:1;visibility:visible}' +
+				'.g4v-autocard{position:absolute;bottom:120%;right:0;width:248px;background:#1b1f20;color:#ddd;border:1px solid #444;border-radius:8px;padding:8px 10px;font:12px system-ui;line-height:1.5;box-shadow:0 4px 14px #0008;display:none;z-index:99999;text-align:left}' +
+				'.g4v-autocard.g4v-open{display:block}' +
+				'.g4v-micwrap{position:relative;display:inline-flex;align-items:center;gap:2px}' +
+				'.g4v-chev{width:18px !important;min-width:18px;padding:0 !important;font-size:11px;opacity:.7;position:relative;z-index:10}' +
+				'.g4v-micwrap{z-index:10}' +
+				'.g4v-opt{cursor:pointer;padding:4px 2px;border-radius:4px;white-space:pre}' +
+				'.g4v-opt:hover{background:#333}' +
+				'.g4v-check{display:inline-block;width:16px;color:#4caf50}' +
 				'.g4v-autocard .g4v-cmds{margin-top:5px;color:#aaa}' +
 				'.g4v-autocard .g4v-status{margin-top:6px;color:#4caf50;font-weight:600}' +
 				'.g4v-autocard .g4v-sens{display:flex;align-items:center;gap:6px;margin-top:6px;color:#aaa}' +
@@ -773,52 +789,60 @@
 					b.title = title; b.style.position = 'relative'; b.textContent = label;
 					return b;
 				};
-				const mic = mk('🎙', 'Record audio message (red = recording; click again to stop & attach)');
+				// ── single mic button + ⌄ options menu ───────────────────────────
+				const wrapM = document.createElement('span');
+				wrapM.className = 'g4v-micwrap';
+				const mic = mk('🎙', '');
+				mic.classList.add('g4v-auto');
+				mic.innerHTML = '<span class="g4v-autoglyph">🎙</span><span class="g4v-autodot">●</span>';
+				mic.removeAttribute('title');               // menu explains; no double tooltip
+				autoBtnRef = mic;
 				mic.onclick = async () => {
+					if (autoState === 'hearing' || autoState === 'countdown') { cancelUtterance(); return; }
 					try {
-						if (!rec) { await startRec(); mic.textContent = '⏺'; mic.classList.add('g4v-rec'); }
-						else { mic.textContent = '🎙'; mic.classList.remove('g4v-rec'); attachToUi(await stopRec()); }
-					} catch (e) { console.warn('[mic]', e); mic.textContent = '🎙'; mic.classList.remove('g4v-rec'); rec = null; }
+						if (!rec) { await startRec(); mic.classList.add('g4v-rec'); mic.querySelector('.g4v-autoglyph').textContent = '⏺'; }
+						else { mic.classList.remove('g4v-rec'); mic.querySelector('.g4v-autoglyph').textContent = '🎙'; attachToUi(await stopRec()); }
+					} catch (e) { console.warn('[mic]', e); mic.classList.remove('g4v-rec'); mic.querySelector('.g4v-autoglyph').textContent = '🎙'; rec = null; }
 				};
-				// ── auto voice mode button (checkmark + red dot, countdown ring) ──
-				const autoWrap = document.createElement('span');
-				autoWrap.className = 'g4v-autowrap';
-				const autoBtn = mk('🎙', '');   // glyph replaced below
-				autoBtn.classList.add('g4v-auto');
-				autoBtn.innerHTML = '<span class="g4v-autoglyph">🎙</span><span class="g4v-autodot">●</span>';
-				autoBtnRef = autoBtn;
-				// hover card: command list + live status + sensitivity
-				const card = document.createElement('div');
-				card.className = 'g4v-autocard';
-				card.innerHTML =
-					'<b>Auto voice mode</b> — always listening. Speak a command or a question;' +
-					' it sends 2s after you stop (keep talking to extend).' +
-					'<div class="g4v-cmds"><b>Commands:</b> “stop” · “read faster / slow down” ·' +
-					' “read that again” · “new conversation” · “try that again”</div>' +
-					'<div class="g4v-status">Status: off</div>' +
-					'<label class="g4v-sens">Sensitivity <input type="range" min="2" max="8" step="0.5"></label>';
-				autoStatusRef = card.querySelector('.g4v-status');
-				const sensInput = card.querySelector('input');
+				const chev = mk('⌄', 'Voice options');
+				chev.classList.add('g4v-chev');
+				const menuEl = document.createElement('div');
+				menuEl.className = 'g4v-autocard';
+				menuEl.innerHTML =
+					'<div class="g4v-opt" data-k="listen"><span class="g4v-check"></span>Auto listen (hands-free)</div>' +
+					'<div class="g4v-opt" data-k="speak"><span class="g4v-check"></span>Auto-speak replies</div>' +
+					'<label class="g4v-sens">Sensitivity <input type="range" min="2" max="8" step="0.5"></label>' +
+					'<div class="g4v-cmds"><b>Voice commands:</b> “stop” · “read faster / slow down” · “read that again” · “new conversation” · “try that again”</div>' +
+					'<div class="g4v-status">Status: off</div>';
+				autoStatusRef = menuEl.querySelector('.g4v-status');
+				const sensInput = menuEl.querySelector('input');
 				sensInput.value = sens();
 				sensInput.oninput = () => localStorage.setItem(LS_SENS, sensInput.value);
-				autoWrap.append(autoBtn, card);
-				paintAuto = () => {
-					const on = flag(LS_AUTO, false);
-					autoBtn.classList.toggle('g4v-auto-on', on);
-					autoBtn.title = on ? 'Auto voice mode ON — hover for commands; click while it is about to send to cancel'
-						: 'Auto voice mode (always listening for voice commands) — click to enable';
+				const paintOpts = () => {
+					menuEl.querySelector('[data-k="listen"] .g4v-check').textContent = flag(LS_AUTO, false) ? '✓ ' : '  ';
+					menuEl.querySelector('[data-k="speak"] .g4v-check').textContent = flag(LS_SPEAK, false) ? '✓ ' : '  ';
 				};
-				paintAuto();
-				autoBtn.onclick = () => {
-					if (autoState === 'hearing' || autoState === 'countdown') { cancelUtterance(); return; }
+				paintAuto = () => {
+					mic.classList.toggle('g4v-auto-on', flag(LS_AUTO, false));
+					paintOpts();
+				};
+				menuEl.querySelector('[data-k="listen"]').onclick = () => {
 					const on = !flag(LS_AUTO, false);
 					setFlag(LS_AUTO, on); paintAuto();
 					if (on) autoStart(); else autoStop();
 				};
+				menuEl.querySelector('[data-k="speak"]').onclick = () => {
+					setFlag(LS_SPEAK, !flag(LS_SPEAK, false)); paintAuto();
+				};
+				chev.onclick = e => { e.stopPropagation(); menuEl.classList.toggle('g4v-open'); paintAuto(); };
+				document.addEventListener('click', e => {
+					if (!wrapM.contains(e.target)) menuEl.classList.remove('g4v-open');
+				});
+				paintAuto();
+				wrapM.append(mic, chev, menuEl);
 				if (flag(LS_AUTO, false)) autoStart();   // resume across reloads
 
-				send.parentElement.insertBefore(mic, send);       // [🎙][🎙auto][Send]
-				send.parentElement.insertBefore(autoWrap, send);
+				send.parentElement.insertBefore(wrapM, send);   // [🎙⌄][Send]
 			}
 
 			// ── 0° and 💭 toggles inside the composer "+" menu ────────────────
