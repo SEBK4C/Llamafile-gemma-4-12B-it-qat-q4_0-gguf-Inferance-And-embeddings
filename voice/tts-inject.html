@@ -1,5 +1,5 @@
 		<script>
-		// ── gemma4 voice+controls v10 ─────────────────────────────────────────
+		// ── gemma4 voice+controls v11 ─────────────────────────────────────────
 		// ONE playback engine, ONE trigger: the per-message player. The old
 		// composer auto-speak is gone — it was a second, independent Audio
 		// object reading captured content while the player read the DOM (which
@@ -28,6 +28,7 @@
 			const LS_T0 = 'gemma-temp0';
 			const LS_THINK = 'gemma-think-always';
 			const LS_RATE = 'gemma-tts-rate';
+			const LS_BARGE = 'gemma-bargein';   // talk-over: speak while it reads
 			const rate = () => Math.min(3, Math.max(0.5, parseFloat(localStorage.getItem(LS_RATE) || '1') || 1));
 			const setRate = v => localStorage.setItem(LS_RATE, String(Math.min(3, Math.max(0.5, v))));
 			let curAudio = null;                         // whatever is playing right now
@@ -278,6 +279,7 @@
 				addEventListener('keydown', keyNav, { passive: true });
 				const detach = () => { for (const ev of navEvs) removeEventListener(ev, unfollow); removeEventListener('keydown', keyNav); };
 				const setIdle = () => { btn.textContent = '▶'; btn.classList.remove('g4v-spin'); clearHl(k); };
+				bargeStart();
 				engine = {
 					btn,
 					stop() { aborted = true; detach(); if (audio) try { audio.pause(); } catch {} setIdle(); },
@@ -349,6 +351,7 @@
 					for (const i of idxs) k.words[i].span.classList.remove('g4v-hl');
 				}
 				detach();
+				bargeStop();
 				if (!aborted) { if (engine && engine.btn === btn) engine = null; setIdle(); }
 			}
 
@@ -367,6 +370,7 @@
 					}
 				};
 				btn.textContent = '⟳'; btn.classList.add('g4v-spin');
+				bargeStart();
 				const waitText = () => new Promise(res => { cap.notify = res; setTimeout(res, 1500); });
 				let from = 0, target = CHUNK0, usedPrefetch = false;
 				const pf = firstBlob.get(msgEl);
@@ -415,6 +419,7 @@
 						} else audio.play().catch(res);
 					});
 				}
+				bargeStop();
 				if (!aborted) { if (engine && engine.btn === btn) engine = null; setIdle(); }
 			}
 
@@ -489,6 +494,65 @@
 					}
 				}
 			}
+
+			// ── barge-in: talk over the model while it reads ───────────────────
+			// Adaptive energy VAD (no external model): while TTS plays, the mic is
+			// monitored; sustained speech pauses playback and starts recording; a
+			// ~900ms pause ends the utterance, attaches the WAV and sends it.
+			// Enabled via the "+" menu (asks for mic permission on first playback).
+			let barge = null;
+			async function bargeStart() {
+				if (barge || !flag(LS_BARGE, false)) return;
+				try {
+					const media = await navigator.mediaDevices.getUserMedia({ audio: true });
+					const ctx = new AudioContext({ sampleRate: 16000 });
+					const srcN = ctx.createMediaStreamSource(media);
+					const node = ctx.createScriptProcessor(2048, 1, 1);
+					let noise = 0.003, speechMs = 0, silenceMs = 0, recording = false;
+					const frames = [];
+					node.onaudioprocess = e => {
+						const d = e.inputBuffer.getChannelData(0);
+						let s = 0;
+						for (let i = 0; i < d.length; i++) s += d[i] * d[i];
+						const rms = Math.sqrt(s / d.length);
+						const frameMs = (d.length / 16000) * 1000;
+						if (!recording) {
+							if (rms > Math.max(0.015, noise * 4)) { speechMs += frameMs; }
+							else { speechMs = 0; noise = noise * 0.95 + rms * 0.05; }
+							if (speechMs > 200) {
+								recording = true; silenceMs = 0; frames.length = 0;
+								if (engine) engine.pauseToggle();
+								console.log('[barge] speech detected — paused reading, recording');
+							}
+						}
+						if (recording) {
+							frames.push(new Float32Array(d));
+							if (rms < Math.max(0.012, noise * 3)) { silenceMs += frameMs; } else { silenceMs = 0; }
+							if (silenceMs > 900) {
+								recording = false;
+								const total = frames.reduce((a, c) => a + c.length, 0);
+								const flat = new Float32Array(total);
+								let o = 0; for (const c of frames) { flat.set(c, o); o += c.length; }
+								if (total > 16000 * 0.4) {
+									attachToUi(encodeWav(flat, 16000));
+									setTimeout(() => {
+										const form = Array.from(document.querySelectorAll('form')).find(f => f.querySelector('textarea'));
+										const send = form && form.querySelector('button[type="submit"]');
+										if (send && !send.disabled) send.click();
+									}, 400);
+									console.log('[barge] utterance sent');
+								}
+								stopAll();
+							}
+						}
+					};
+					srcN.connect(node); node.connect(ctx.destination);
+					barge = { media, ctx, srcN, node, stop() {
+						try { node.disconnect(); srcN.disconnect(); media.getTracks().forEach(t => t.stop()); ctx.close(); } catch {}
+					}};
+				} catch (e) { console.warn('[barge]', e); }
+			}
+			function bargeStop() { if (barge) { const b = barge; barge = null; b.stop(); } }
 
 			// ── recorder + composer buttons (auto-speak removed) ──────────────
 			let rec = null;
@@ -603,6 +667,8 @@
 						() => setFlag(LS_T0, !flag(LS_T0, false))));
 					menu.appendChild(mkItem('\ud83d\udcad Reason every turn', () => flag(LS_THINK, true),
 						() => setFlag(LS_THINK, !flag(LS_THINK, true))));
+					menu.appendChild(mkItem('\ud83d\udde3 Talk-over barge-in', () => flag(LS_BARGE, false),
+						() => setFlag(LS_BARGE, !flag(LS_BARGE, false))));
 				}
 			}
 
