@@ -1,5 +1,5 @@
 		<script>
-		// ── gemma4 voice+controls v17 ─────────────────────────────────────────
+		// ── gemma4 voice+controls v18 ─────────────────────────────────────────
 		// ONE playback engine, ONE trigger: the per-message player. The old
 		// composer auto-speak is gone — it was a second, independent Audio
 		// object reading captured content while the player read the DOM (which
@@ -20,14 +20,18 @@
 		// Composer keeps: 🎙 mic (red pulse while recording) · 0° · 💭.
 		(() => {
 			const TTS = '/tts/v1/audio/speech';
-			// The Kokoro voice is a sidecar, not baked into the llamafile. Probe
-			// once; without it we render no read-aloud controls (mic stays — audio
-			// INPUT is part of the model itself).
+			// Without a reachable voice server we render no read-aloud controls
+			// (mic stays — audio INPUT is part of the model itself). The server is
+			// supervised and respawns in ~3s after a crash, so keep polling while
+			// it's down instead of hiding the controls for the rest of the session.
 			let ttsUp = null;
-			fetch('/tts/health').then(r => {
+			let ttsWarmed = false;
+			const probeTts = () => fetch('/tts/health').then(r => {
 				ttsUp = r.ok;
-				if (r.ok) synth('Ready.').catch(() => {});   // warm the voice model now, not on first play
+				if (r.ok && !ttsWarmed) { ttsWarmed = true; synth('Ready.').catch(() => {}); }   // warm the voice model now, not on first play
 			}).catch(() => { ttsUp = false; });
+			probeTts();
+			setInterval(() => { if (ttsUp !== true) probeTts(); }, 15000);
 			const LS_T0 = 'gemma-temp0';
 			const LS_THINK = 'gemma-think-always';
 			const LS_RATE = 'gemma-tts-rate';
@@ -117,10 +121,14 @@
 				if (cut === undefined) cut = ends.length ? ends[ends.length - 1] : Math.min(s.length, target * 2);
 				return text.slice(0, cut).trim();
 			}
-			const synthFirst = txt => fetch(TTS, {
-				method: 'POST', headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ input: txt, voice: 'af_heart' })
-			}).then(r => r.ok ? r.blob() : null).catch(() => null);
+			const synthFirst = txt => {
+				const t = ttsSafe(txt);
+				if (!t) return Promise.resolve(null);
+				return fetch(TTS, {
+					method: 'POST', headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ input: t, voice: 'af_heart' })
+				}).then(r => r.ok ? r.blob() : null).catch(() => null);
+			};
 
 			// Prewarm: as soon as a reply completes, build its karaoke and start
 			// synthesizing sentence 0 into the audio cache. Stored as a PROMISE so a
@@ -291,10 +299,39 @@
 			let engine = null; // {stop(), pauseToggle(), btn}
 			function stopAll() { if (engine) { const e = engine; engine = null; e.stop(); } }
 
-			const synth = text => fetch(TTS, {
-				method: 'POST', headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ input: text, voice: 'af_heart' })
-			}).then(r => { if (!r.ok) throw new Error('tts ' + r.status); return r.blob(); });
+			// The TTS runner used to die on whitespace-only prompts, long digit
+			// runs, and any single "sentence" past ~300 chars without . ! ?
+			// (commas don't split). The server guards now too — this mirror keeps
+			// old baked servers safe and avoids pointless round-trips.
+			function ttsSafe(text) {
+				let t = String(text || '').trim();
+				if (!t) return '';
+				t = t.replace(/\d{9,}/g, m => m.replace(/(\d{8})(?=\d)/g, '$1 '));
+				if (!/[^.!?]{220}/.test(t)) return t;
+				let out = '', since = 0, lastSp = -1;
+				for (const ch of t) {   // for..of = code points, never splits surrogates
+					out += ch; since++;
+					if (ch === '.' || ch === '!' || ch === '?') { since = 0; lastSp = -1; }
+					else if (/\s/.test(ch)) lastSp = out.length - 1;
+					if (since >= 220) {
+						if (lastSp > 0) { out = out.slice(0, lastSp) + '. ' + out.slice(lastSp + 1); since = out.length - lastSp - 2; }
+						else { out += '. '; since = 0; }
+						lastSp = -1;
+					}
+				}
+				return out;
+			}
+
+			const synth = text => {
+				const t = ttsSafe(text);
+				if (!t) return Promise.reject(new Error('tts empty input'));
+				const go = () => fetch(TTS, {
+					method: 'POST', headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ input: t, voice: 'af_heart' })
+				}).then(r => { if (!r.ok) throw new Error('tts ' + r.status); return r.blob(); });
+				// one retry after 2.5s: bridges the supervised server's respawn window
+				return go().catch(() => { probeTts(); return new Promise(res => setTimeout(res, 2500)).then(go); });
+			};
 
 			// cut a chunk of >= target chars at a sentence boundary (or all of it)
 			function cutChunk(text, from, target, force) {
