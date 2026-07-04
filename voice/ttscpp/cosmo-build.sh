@@ -12,8 +12,13 @@ mkdir -p "$OUT"
 INC="-I$ROOT/ggml/include -I$ROOT/ggml/src -I$ROOT/ggml/src/ggml-cpu \
      -I$ROOT/ggml-patches -I$ROOT/include -I$ROOT/src -I$ROOT/examples/server -I$ROOT/build/examples/server"
 DEFS="-DGGML_USE_CPU -DNDEBUG -D_GNU_SOURCE"
-CFLAGS="-O2 -fPIC $INC $DEFS"
-CXXFLAGS="-O2 -std=gnu++23 -fexceptions -frtti $INC $DEFS"
+# x86 SIMD floor: AVX2+FMA+F16C (Haswell 2013+). ggml has no runtime dispatch
+# in this standalone build, and generic SSE2 costs ~10x on the vocoder (RTF 2.2
+# vs 0.25). cosmocc -Xx86_64- prefixed flags apply to the x86 half only; the
+# aarch64 half keeps its NEON defaults.
+SIMD="-Xx86_64-mavx -Xx86_64-mavx2 -Xx86_64-mfma -Xx86_64-mf16c"
+CFLAGS="-O2 -fPIC $SIMD $INC $DEFS"
+CXXFLAGS="-O2 -std=gnu++23 -fexceptions -frtti $SIMD $INC $DEFS"
 
 C_SRCS=(
   ggml/src/ggml.c

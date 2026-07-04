@@ -1,5 +1,5 @@
 		<script>
-		// ── gemma4 voice+controls v16 ─────────────────────────────────────────
+		// ── gemma4 voice+controls v17 ─────────────────────────────────────────
 		// ONE playback engine, ONE trigger: the per-message player. The old
 		// composer auto-speak is gone — it was a second, independent Audio
 		// object reading captured content while the player read the DOM (which
@@ -189,6 +189,18 @@
 									const el = lastMsgEl();
 									if (el) { cap.el = el; capture.set(el, cap); }
 								}
+								// auto-speak: begin reading WHILE the reply streams — the live
+								// golden-ratio reader keeps pace with generation (snappy path)
+								if (cap.primary && !cap.autoStarted && cap.el && flag(LS_SPEAK, false)) {
+									cap.autoStarted = true;
+									const kick = tries => {
+										if (cap.doneSpoken || engine) return;
+										const b = cap.el.querySelector('.g4v-play:not(.g4v-rate)');
+										if (b) { b.click(); }
+										else if (tries < 20) setTimeout(() => kick(tries + 1), 250);
+									};
+									setTimeout(() => kick(0), 500);
+								}
 								if (cap.notify) cap.notify();
 							}
 						} catch {}
@@ -201,7 +213,9 @@
 				if (flag(LS_SPEAK, false) && cap.text.trim().length > 1 && !Object.keys(cap.tc || {}).length) {
 					setTimeout(() => {
 						if (!flag(LS_SPEAK, false)) return;
-						stopAll();                          // newest reply wins over an ongoing read
+						// already reading THIS reply (live reader started mid-stream)? leave it.
+						if (engine && engine.btn && cap.el && cap.el.contains(engine.btn)) return;
+						stopAll();                          // otherwise newest reply wins
 						const el = cap.el || lastMsgEl();
 						const b = el && el.querySelector('.g4v-play:not(.g4v-rate)');
 						if (b) b.click();
