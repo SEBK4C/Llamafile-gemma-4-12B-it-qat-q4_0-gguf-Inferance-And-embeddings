@@ -1,5 +1,5 @@
 		<script>
-		// ── gemma4 voice+controls v11 ─────────────────────────────────────────
+		// ── gemma4 voice+controls v12 ─────────────────────────────────────────
 		// ONE playback engine, ONE trigger: the per-message player. The old
 		// composer auto-speak is gone — it was a second, independent Audio
 		// object reading captured content while the player read the DOM (which
@@ -29,6 +29,26 @@
 			const LS_THINK = 'gemma-think-always';
 			const LS_RATE = 'gemma-tts-rate';
 			const LS_BARGE = 'gemma-bargein';   // talk-over: speak while it reads
+			// Stage 2: spoken UI commands via Gemma's native function-calling from
+			// audio. Tools ride ONLY on barge-in-originated sends; recognized calls
+			// are executed client-side when the stream ends.
+			let bargePending = false;
+			const VOICE_TOOLS = [
+				{ type: 'function', function: { name: 'stop_reading',
+					description: 'Stop the text-to-speech read-aloud playback immediately. Call when the user asks to stop, pause, be quiet, or silence the reading.',
+					parameters: { type: 'object', properties: {} } } },
+				{ type: 'function', function: { name: 'set_reading_speed',
+					description: 'Change the read-aloud playback speed. Call when the user asks to read faster or slower.',
+					parameters: { type: 'object', properties: { speed: { type: 'number',
+						description: 'Playback rate multiplier between 0.5 and 3.0, 1.0 = normal. Faster = higher.' } }, required: ['speed'] } } },
+			];
+			function execVoiceTool(name, argStr) {
+				try {
+					const a = argStr ? JSON.parse(argStr) : {};
+					if (name === 'stop_reading') { stopAll(); console.log('[voice-cmd] stopped reading'); }
+					else if (name === 'set_reading_speed' && a.speed) { applyRate(a.speed); console.log('[voice-cmd] speed ->', a.speed); }
+				} catch (e) { console.warn('[voice-cmd]', e); }
+			}
 			const rate = () => Math.min(3, Math.max(0.5, parseFloat(localStorage.getItem(LS_RATE) || '1') || 1));
 			const setRate = v => localStorage.setItem(LS_RATE, String(Math.min(3, Math.max(0.5, v))));
 			let curAudio = null;                         // whatever is playing right now
@@ -109,6 +129,15 @@
 							const j = JSON.parse(p);
 							const c = j.choices && j.choices[0];
 							const d = (c && (c.delta || c.message)) || {};
+							if (d.tool_calls) {
+								for (const t of d.tool_calls) {
+									const i = t.index || 0;
+									cap.tc = cap.tc || {};
+									cap.tc[i] = cap.tc[i] || { name: '', args: '' };
+									if (t.function && t.function.name) cap.tc[i].name += t.function.name;
+									if (t.function && t.function.arguments) cap.tc[i].args += t.function.arguments;
+								}
+							}
 							if (d.content) {
 								cap.text += d.content;
 								if (!cap.el) {
@@ -121,6 +150,7 @@
 					}
 				}
 				cap.done = true;
+				if (cap.tc) for (const k of Object.values(cap.tc)) execVoiceTool(k.name, k.args);
 				if (!cap.el) {
 					setTimeout(() => { const el = lastMsgEl(); if (el) { cap.el = el; capture.set(el, cap); prefetchFirst(el, cap.text); } }, 400);
 				} else {
@@ -140,6 +170,11 @@
 						if (b.thinking_budget_tokens === 0) delete b.thinking_budget_tokens;
 					}
 					if (flag(LS_T0, false)) b.temperature = 0;
+					if (bargePending) {
+						bargePending = false;
+						b.tools = [...VOICE_TOOLS, ...(b.tools || [])];
+						b.tool_choice = 'auto';
+					}
 					return JSON.stringify(b);
 				} catch { return txt; }
 			}
@@ -535,6 +570,7 @@
 								let o = 0; for (const c of frames) { flat.set(c, o); o += c.length; }
 								if (total > 16000 * 0.4) {
 									attachToUi(encodeWav(flat, 16000));
+									bargePending = true;
 									setTimeout(() => {
 										const form = Array.from(document.querySelectorAll('form')).find(f => f.querySelector('textarea'));
 										const send = form && form.querySelector('button[type="submit"]');
