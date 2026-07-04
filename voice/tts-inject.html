@@ -1,5 +1,5 @@
 		<script>
-		// ── gemma4 voice+controls v21 ─────────────────────────────────────────
+		// ── gemma4 voice+controls v22 ─────────────────────────────────────────
 		// ONE playback engine, ONE trigger: the per-message player. The old
 		// composer auto-speak is gone — it was a second, independent Audio
 		// object reading captured content while the player read the DOM (which
@@ -9,7 +9,7 @@
 		//   fetch tee → capture content-only deltas per message element
 		//   → user clicks ▶ on a message
 		//   → stopAll() kills any other playback
-		//   → golden-ratio chunker (word-based): first cut = 10 complete
+		//   → golden-ratio chunker (word-based): first cut = 5 complete
 		//     words (or an earlier sentence end), each next chunk ×1.618 up
 		//     to 240 words; cuts NEVER land mid-word; chunk N+1 synthesizes
 		//     while N plays; if the stream is still running the chunker
@@ -38,7 +38,9 @@
 			const LS_AUTO = 'gemma-automode';   // always-listening voice mode
 			const LS_SENS = 'gemma-vad-sens';   // VAD sensitivity multiplier (2..8)
 			const LS_SPEAK = 'gemma-autospeak'; // read every reply aloud automatically
-			const SEND_DELAY = 2000;            // ms of silence before an utterance sends
+			const LS_DELAY = 'gemma-send-delay';
+			const SEND_DELAYS = [2000, 1200, 800];   // cycled from the mic menu; 2s = default
+			const sendDelay = () => { const v = parseInt(localStorage.getItem(LS_DELAY) || '2000', 10); return SEND_DELAYS.includes(v) ? v : 2000; };
 			const sens = () => { const v = parseFloat(localStorage.getItem(LS_SENS) || '4'); return isFinite(v) ? Math.min(8, Math.max(2, v)) : 4; };
 			// Stage 2: spoken UI commands via Gemma's native function-calling from
 			// audio. Tools ride ONLY on barge-in-originated sends; recognized calls
@@ -120,8 +122,10 @@
 			const PHI = 1.618;
 			// chunk sizes are WORDS, not chars: a chunk must never end mid-word
 			// (a split word is synthesized as two garbage syllable groups).
-			// 10 complete words first ⇒ fast first utterance, then golden growth.
-			const WORDS0 = 10, WORDS_MAX = 240;
+			// First cut = 5 complete words: ~1.2s synth ⇒ fastest natural first
+			// utterance. Golden growth after — ×1.618 ≈ 1/RTF, so each next
+			// chunk finishes synthesizing before the previous finishes playing.
+			const WORDS0 = 5, WORDS_MAX = 240;
 
 			const flag = (k, d) => { const v = localStorage.getItem(k); return v === null ? d : v === '1'; };
 			const setFlag = (k, v) => localStorage.setItem(k, v ? '1' : '0');
@@ -743,7 +747,7 @@
 			function paintAutoStatus() {
 				if (!autoStatusRef) return;
 				const map = { off: 'off', idle: 'listening…', hearing: 'hearing you…',
-					countdown: 'sending in ' + Math.max(0, (SEND_DELAY - (performance.now() - cdStart)) / 1000).toFixed(1) + 's',
+					countdown: 'sending in ' + Math.max(0, (sendDelay() - (performance.now() - cdStart)) / 1000).toFixed(1) + 's',
 					holding: 'waiting for the model…' };
 				autoStatusRef.textContent = 'Status: ' + (map[autoState] || autoState);
 			}
@@ -797,8 +801,8 @@
 			}
 
 			function cdTick() {
-				const left = SEND_DELAY - (performance.now() - cdStart);
-				const pct = Math.min(1, (performance.now() - cdStart) / SEND_DELAY);
+				const left = sendDelay() - (performance.now() - cdStart);
+				const pct = Math.min(1, (performance.now() - cdStart) / sendDelay());
 				if (autoBtnRef) autoBtnRef.style.setProperty('--deg', (pct * 360) + 'deg');
 				paintAutoStatus();
 				if (left <= 0) { setAutoState('idle'); autoSend(); return; }
@@ -997,6 +1001,7 @@
 					'<div class="g4v-opt" data-k="listen"><span class="g4v-check"></span>Auto listen (hands-free)</div>' +
 					'<div class="g4v-opt" data-k="speak"><span class="g4v-check"></span>Auto-speak replies</div>' +
 					'<label class="g4v-sens">Sensitivity <input type="range" min="2" max="8" step="0.5"></label>' +
+					'<div class="g4v-opt" data-k="delay"><span class="g4v-check"></span><span class="g4v-delaylabel"></span></div>' +
 					'<div class="g4v-cmds"><b>Voice commands:</b> “stop” · “read faster / slow down” · “read that again” · “new conversation” · “try that again”</div>' +
 					'<div class="g4v-status">Status: off</div>';
 				autoStatusRef = menuEl.querySelector('.g4v-status');
@@ -1006,6 +1011,7 @@
 				const paintOpts = () => {
 					menuEl.querySelector('[data-k="listen"] .g4v-check').textContent = flag(LS_AUTO, false) ? '✓ ' : '  ';
 					menuEl.querySelector('[data-k="speak"] .g4v-check').textContent = flag(LS_SPEAK, false) ? '✓ ' : '  ';
+					menuEl.querySelector('.g4v-delaylabel').textContent = 'Send delay: ' + (sendDelay() / 1000).toFixed(1) + 's (tap to change)';
 				};
 				paintAuto = () => {
 					mic.classList.toggle('g4v-auto-on', flag(LS_AUTO, false));
@@ -1018,6 +1024,11 @@
 				};
 				menuEl.querySelector('[data-k="speak"]').onclick = () => {
 					setFlag(LS_SPEAK, !flag(LS_SPEAK, false)); paintAuto();
+				};
+				menuEl.querySelector('[data-k="delay"]').onclick = () => {
+					const cur = SEND_DELAYS.indexOf(sendDelay());
+					localStorage.setItem(LS_DELAY, String(SEND_DELAYS[(cur + 1) % SEND_DELAYS.length]));
+					paintOpts();
 				};
 				chev.onclick = e => {
 					e.stopPropagation();
