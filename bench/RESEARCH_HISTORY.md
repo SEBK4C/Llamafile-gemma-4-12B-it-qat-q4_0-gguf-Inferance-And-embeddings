@@ -752,9 +752,33 @@ serve_score delta. This is the E4→E5 lesson, now generalized.
 - **G9 ✅ (E15, it.15)** Decline-clause quality validated: no regression, acc &
   soph consistently up, cal perfect; composite unrankable at n=2 (noise). Ship
   recommendation de-risked.
-- **G8 ✅ (E14, its.13-14)** Explicit decline clause → perfect jailbreak
-  resistance (0.75→1.00) at zero over-refusal cost; candidate ready to ship as
-  WebUI default pending Sebastian's go.
+- **G8 ✅ SHIPPED (E14 its.13-14; DEPLOYED it.22, 2026-07-05)** Explicit decline
+  clause → perfect jailbreak resistance (0.75→1.00) at zero over-refusal cost.
+  **Sebastian approved; now the LIVE WebUI default on CT 118.**
+
+### DEPLOYMENT — decline clause shipped to prod (iteration 22, 2026-07-05)
+Sebastian approved shipping the G8 decline clause as the WebUI default. Deployed
+to CT 118 `gemma.service`:
+- **Mechanism:** systemd drop-in (`gemma.service.d/decline-clause.conf`) swaps
+  the ExecStart's inline `--ui-config '{...}'` for `--ui-config-file
+  /opt/ui-config.json`. Reason: the decline prompt contains apostrophes
+  ('developer mode' / 'unrestricted') that break a single-quoted shell arg;
+  the file mechanism carries the exact validated text safely (binary supports
+  `--ui-config-file`).
+- **Config:** `/opt/ui-config.json` = `{excludeReasoningFromContext,
+  preEncodeConversation, systemMessage=decline.json prompt (1534 chars)}` — the
+  two prior keys preserved, systemMessage added.
+- **Verified:** `/props` `ui_settings.systemMessage` present (1534, clause
+  included); behavioral on the live server — declines the Kitty persona
+  jailbreak ("I won't adopt that persona or act as an uncensored AI") while
+  fully answering a benign SQL-injection question. KV purged on restart.
+- **Reversible:** delete the drop-in → `daemon-reload` → restart (reverts to
+  the inline excludeReasoning+preEncode ExecStart, backed up).
+- **Repo/publish:** `package/ui-config.json` systemMessage updated to the
+  decline clause (next build bakes it); README + HF model card note the
+  hardened default. The currently-published v0.5.0 binary still bakes the
+  Constitution-only prompt — a rebuild would bake the clause into the
+  downloadable artifact (pending).
 - **H7 ✅ (E13, it.12)** Concurrency characterized — single slot is
   near-serial with ~1.37× overlap, ~200 tok/s ceiling, no errors to C=8.
   docs/concurrency.md published.

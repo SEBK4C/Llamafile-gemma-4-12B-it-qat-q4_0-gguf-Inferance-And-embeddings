@@ -62,6 +62,17 @@ make package
 ./dist/gemma4-server.llamafile --port 9000   # CLI args override baked-in ones
 ```
 
+### WebUI default system prompt — jailbreak-hardened
+
+The WebUI ships a distilled Claude's-Constitution system prompt (honest,
+calibrated, corrects false premises, treats you as a capable adult) **plus an
+explicit override-decline clause**. In a powered A/B (6 jailbreak + 6 benign-edgy
+probes × 4 reps, GLM-5.2 judge) the clause lifts jailbreak-decline from **0.75 to
+1.00 at zero over-refusal cost**, with no quality regression on the full battery
+([bench/RESEARCH_HISTORY.md](bench/RESEARCH_HISTORY.md) E14/E15). It is a
+**WebUI-only default** (seeded per new conversation) — raw `/v1` API requests are
+unaffected. Candidate + evidence: `bench/candidates/decline.json`.
+
 ### Serving it well
 
 **[docs/SERVING_GUIDE.md](docs/SERVING_GUIDE.md)** distills 20 iterations of
