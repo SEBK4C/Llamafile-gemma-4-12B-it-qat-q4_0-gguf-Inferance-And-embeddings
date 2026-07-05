@@ -1,0 +1,22 @@
+diff --git a/src/models/qwen3.cpp b/src/models/qwen3.cpp
+index 1d0d2fa..9345998 100644
+--- a/src/models/qwen3.cpp
++++ b/src/models/qwen3.cpp
+@@ -66,7 +66,16 @@ llama_model_qwen3::graph::graph(const llama_model & model, const llm_graph_param
+ 
+     auto * inp_attn = build_attn_inp_kv();
+ 
+-    ggml_tensor * inp_out_ids = build_inp_out_ids();
++    // pooled embeddings: keep every row and build NO out_ids input — this
++    // fork exempts LAST pooling from the all-tokens-output rule
++    // (llama-context.cpp output_all), so out_ids may cover a subset while
++    // inp_cls holds absolute batch rows; subsetting would make the pooling
++    // get_rows read out of bounds (F16), and a built-but-unconsumed out_ids
++    // input is never allocated → null-buffer assert in its set_input.
++    // Upstream forces all-outputs for pooled embeddings, where the subset
++    // is the identity anyway.
++    const bool pooled_embd = cparams.embeddings && cparams.pooling_type != LLAMA_POOLING_TYPE_NONE;
++    ggml_tensor * inp_out_ids = pooled_embd ? nullptr : build_inp_out_ids();
+ 
+     for (int il = 0; il < n_layer; ++il) {
+         ggml_tensor * inpSA = inpL;

@@ -1,0 +1,897 @@
+{
+ "fixture": {
+  "docs": 48,
+  "queries": 29,
+  "triplets": 4
+ },
+ "results": [
+  {
+   "config": "qwen3-raw",
+   "mode": "raw",
+   "dims": 1024,
+   "hit1": 0.9310344827586207,
+   "hit3": 1.0,
+   "mrr": 0.9655,
+   "margin_mean": 0.322,
+   "margins": [
+    0.3113,
+    0.3111,
+    0.3577,
+    0.308
+   ],
+   "ms_per_doc": 116.7,
+   "ms_per_query": 56.0,
+   "ranks": [
+    [
+     "how does binary search work",
+     "code1",
+     1,
+     0.7602,
+     "code1"
+    ],
+    [
+     "right to be forgotten under EU data protection law",
+     "law2",
+     1,
+     0.7659,
+     "law2"
+    ],
+    [
+     "what drug treats osteoarthritis inflammation",
+     "med1",
+     1,
+     0.7411,
+     "med1"
+    ],
+    [
+     "how much do I owe on the March electricity bill",
+     "home1",
+     1,
+     0.8061,
+     "home1"
+    ],
+    [
+     "when was the Eiffel Tower built",
+     "web1",
+     1,
+     0.5912,
+     "web1"
+    ],
+    [
+     "how do plants make oxygen",
+     "web2",
+     1,
+     0.5932,
+     "web2"
+    ],
+    [
+     "picture of kids at a birthday celebration",
+     "photo1",
+     1,
+     0.7171,
+     "photo1"
+    ],
+    [
+     "which quarter had the highest revenue",
+     "chart1",
+     2,
+     0.751,
+     "chart_rev"
+    ],
+    [
+     "antibiotic for strep throat",
+     "med3",
+     1,
+     0.7275,
+     "med3"
+    ],
+    [
+     "can I quit my lease if the apartment is uninhabitable",
+     "law1",
+     1,
+     0.6834,
+     "law1"
+    ],
+    [
+     "how much is the April electricity bill",
+     "inv_apr",
+     1,
+     0.7504,
+     "inv_apr"
+    ],
+    [
+     "March power bill total",
+     "inv_mar",
+     1,
+     0.6885,
+     "inv_mar"
+    ],
+    [
+     "what do I pay for internet",
+     "inv_net",
+     1,
+     0.6344,
+     "inv_net"
+    ],
+    [
+     "gas bill due date April",
+     "inv_gas",
+     1,
+     0.7547,
+     "inv_gas"
+    ],
+    [
+     "COX-2 selective arthritis drug easy on the stomach",
+     "med_cele",
+     1,
+     0.8182,
+     "med_cele"
+    ],
+    [
+     "long acting NSAID for chronic joint pain twice a day",
+     "med_nap",
+     1,
+     0.8062,
+     "med_nap"
+    ],
+    [
+     "antibiotic option when allergic to penicillin",
+     "med_peni",
+     1,
+     0.7932,
+     "med_peni"
+    ],
+    [
+     "right to receive my data in machine readable form",
+     "law_a20",
+     1,
+     0.7354,
+     "law_a20"
+    ],
+    [
+     "which GDPR article covers deleting my data",
+     "law_a17",
+     1,
+     0.777,
+     "law_a17"
+    ],
+    [
+     "can I sublet my apartment",
+     "law_sublet",
+     1,
+     0.682,
+     "law_sublet"
+    ],
+    [
+     "when do I get my rental deposit back",
+     "law_deposit",
+     1,
+     0.6847,
+     "law_deposit"
+    ],
+    [
+     "sorting algorithm that partitions around a pivot",
+     "code_quick",
+     1,
+     0.8432,
+     "code_quick"
+    ],
+    [
+     "difference of rebase from merge linear history",
+     "code_rebase",
+     2,
+     0.7996,
+     "code3"
+    ],
+    [
+     "systemd only restart when the service crashes",
+     "code_restart",
+     1,
+     0.7862,
+     "code_restart"
+    ],
+    [
+     "bridge that opened in 1883",
+     "web_brooklyn",
+     1,
+     0.6697,
+     "web_brooklyn"
+    ],
+    [
+     "San Francisco bridge opening year",
+     "web_golden",
+     1,
+     0.7009,
+     "web_golden"
+    ],
+    [
+     "how do cells turn glucose into ATP",
+     "web_resp",
+     1,
+     0.7237,
+     "web_resp"
+    ],
+    [
+     "wedding photo with the cake",
+     "photo_wed",
+     1,
+     0.7634,
+     "photo_wed"
+    ],
+    [
+     "kids at the beach picture",
+     "photo_beach",
+     1,
+     0.7138,
+     "photo_beach"
+    ]
+   ]
+  },
+  {
+   "config": "qwen3-instr",
+   "mode": "qwen3",
+   "dims": 1024,
+   "hit1": 0.896551724137931,
+   "hit3": 1.0,
+   "mrr": 0.9483,
+   "margin_mean": 0.322,
+   "margins": [
+    0.3113,
+    0.3111,
+    0.3577,
+    0.308
+   ],
+   "ms_per_doc": 116.7,
+   "ms_per_query": 89.1,
+   "ranks": [
+    [
+     "how does binary search work",
+     "code1",
+     1,
+     0.7922,
+     "code1"
+    ],
+    [
+     "right to be forgotten under EU data protection law",
+     "law2",
+     2,
+     0.6491,
+     "law_a17"
+    ],
+    [
+     "what drug treats osteoarthritis inflammation",
+     "med1",
+     1,
+     0.6764,
+     "med1"
+    ],
+    [
+     "how much do I owe on the March electricity bill",
+     "home1",
+     1,
+     0.7968,
+     "home1"
+    ],
+    [
+     "when was the Eiffel Tower built",
+     "web1",
+     1,
+     0.6497,
+     "web1"
+    ],
+    [
+     "how do plants make oxygen",
+     "web2",
+     1,
+     0.5436,
+     "web2"
+    ],
+    [
+     "picture of kids at a birthday celebration",
+     "photo1",
+     1,
+     0.6941,
+     "photo1"
+    ],
+    [
+     "which quarter had the highest revenue",
+     "chart1",
+     1,
+     0.6645,
+     "chart1"
+    ],
+    [
+     "antibiotic for strep throat",
+     "med3",
+     1,
+     0.7212,
+     "med3"
+    ],
+    [
+     "can I quit my lease if the apartment is uninhabitable",
+     "law1",
+     1,
+     0.6368,
+     "law1"
+    ],
+    [
+     "how much is the April electricity bill",
+     "inv_apr",
+     1,
+     0.7075,
+     "inv_apr"
+    ],
+    [
+     "March power bill total",
+     "inv_mar",
+     2,
+     0.679,
+     "home1"
+    ],
+    [
+     "what do I pay for internet",
+     "inv_net",
+     1,
+     0.6509,
+     "inv_net"
+    ],
+    [
+     "gas bill due date April",
+     "inv_gas",
+     1,
+     0.7075,
+     "inv_gas"
+    ],
+    [
+     "COX-2 selective arthritis drug easy on the stomach",
+     "med_cele",
+     1,
+     0.7902,
+     "med_cele"
+    ],
+    [
+     "long acting NSAID for chronic joint pain twice a day",
+     "med_nap",
+     1,
+     0.766,
+     "med_nap"
+    ],
+    [
+     "antibiotic option when allergic to penicillin",
+     "med_peni",
+     1,
+     0.7964,
+     "med_peni"
+    ],
+    [
+     "right to receive my data in machine readable form",
+     "law_a20",
+     1,
+     0.7164,
+     "law_a20"
+    ],
+    [
+     "which GDPR article covers deleting my data",
+     "law_a17",
+     1,
+     0.7569,
+     "law_a17"
+    ],
+    [
+     "can I sublet my apartment",
+     "law_sublet",
+     1,
+     0.646,
+     "law_sublet"
+    ],
+    [
+     "when do I get my rental deposit back",
+     "law_deposit",
+     1,
+     0.682,
+     "law_deposit"
+    ],
+    [
+     "sorting algorithm that partitions around a pivot",
+     "code_quick",
+     1,
+     0.8022,
+     "code_quick"
+    ],
+    [
+     "difference of rebase from merge linear history",
+     "code_rebase",
+     2,
+     0.7739,
+     "code3"
+    ],
+    [
+     "systemd only restart when the service crashes",
+     "code_restart",
+     1,
+     0.7315,
+     "code_restart"
+    ],
+    [
+     "bridge that opened in 1883",
+     "web_brooklyn",
+     1,
+     0.6495,
+     "web_brooklyn"
+    ],
+    [
+     "San Francisco bridge opening year",
+     "web_golden",
+     1,
+     0.6785,
+     "web_golden"
+    ],
+    [
+     "how do cells turn glucose into ATP",
+     "web_resp",
+     1,
+     0.6446,
+     "web_resp"
+    ],
+    [
+     "wedding photo with the cake",
+     "photo_wed",
+     1,
+     0.6827,
+     "photo_wed"
+    ],
+    [
+     "kids at the beach picture",
+     "photo_beach",
+     1,
+     0.6364,
+     "photo_beach"
+    ]
+   ]
+  },
+  {
+   "config": "egemma-raw",
+   "mode": "raw",
+   "dims": 768,
+   "hit1": 0.8275862068965517,
+   "hit3": 1.0,
+   "mrr": 0.9138,
+   "margin_mean": 0.2671,
+   "margins": [
+    0.2916,
+    0.3001,
+    0.2364,
+    0.2403
+   ],
+   "ms_per_doc": 25.0,
+   "ms_per_query": 9.2,
+   "ranks": [
+    [
+     "how does binary search work",
+     "code1",
+     2,
+     0.6108,
+     "code_bin"
+    ],
+    [
+     "right to be forgotten under EU data protection law",
+     "law2",
+     1,
+     0.6193,
+     "law2"
+    ],
+    [
+     "what drug treats osteoarthritis inflammation",
+     "med1",
+     1,
+     0.6547,
+     "med1"
+    ],
+    [
+     "how much do I owe on the March electricity bill",
+     "home1",
+     1,
+     0.6767,
+     "home1"
+    ],
+    [
+     "when was the Eiffel Tower built",
+     "web1",
+     1,
+     0.6828,
+     "web1"
+    ],
+    [
+     "how do plants make oxygen",
+     "web2",
+     1,
+     0.5512,
+     "web2"
+    ],
+    [
+     "picture of kids at a birthday celebration",
+     "photo1",
+     2,
+     0.7656,
+     "photo_bday"
+    ],
+    [
+     "which quarter had the highest revenue",
+     "chart1",
+     1,
+     0.6254,
+     "chart1"
+    ],
+    [
+     "antibiotic for strep throat",
+     "med3",
+     1,
+     0.7214,
+     "med3"
+    ],
+    [
+     "can I quit my lease if the apartment is uninhabitable",
+     "law1",
+     1,
+     0.6552,
+     "law1"
+    ],
+    [
+     "how much is the April electricity bill",
+     "inv_apr",
+     2,
+     0.6276,
+     "home1"
+    ],
+    [
+     "March power bill total",
+     "inv_mar",
+     2,
+     0.6611,
+     "home1"
+    ],
+    [
+     "what do I pay for internet",
+     "inv_net",
+     1,
+     0.4461,
+     "inv_net"
+    ],
+    [
+     "gas bill due date April",
+     "inv_gas",
+     1,
+     0.5978,
+     "inv_gas"
+    ],
+    [
+     "COX-2 selective arthritis drug easy on the stomach",
+     "med_cele",
+     1,
+     0.7223,
+     "med_cele"
+    ],
+    [
+     "long acting NSAID for chronic joint pain twice a day",
+     "med_nap",
+     1,
+     0.7938,
+     "med_nap"
+    ],
+    [
+     "antibiotic option when allergic to penicillin",
+     "med_peni",
+     1,
+     0.7152,
+     "med_peni"
+    ],
+    [
+     "right to receive my data in machine readable form",
+     "law_a20",
+     1,
+     0.6561,
+     "law_a20"
+    ],
+    [
+     "which GDPR article covers deleting my data",
+     "law_a17",
+     2,
+     0.7027,
+     "law2"
+    ],
+    [
+     "can I sublet my apartment",
+     "law_sublet",
+     1,
+     0.6401,
+     "law_sublet"
+    ],
+    [
+     "when do I get my rental deposit back",
+     "law_deposit",
+     1,
+     0.6814,
+     "law_deposit"
+    ],
+    [
+     "sorting algorithm that partitions around a pivot",
+     "code_quick",
+     1,
+     0.6272,
+     "code_quick"
+    ],
+    [
+     "difference of rebase from merge linear history",
+     "code_rebase",
+     1,
+     0.5732,
+     "code_rebase"
+    ],
+    [
+     "systemd only restart when the service crashes",
+     "code_restart",
+     1,
+     0.6301,
+     "code_restart"
+    ],
+    [
+     "bridge that opened in 1883",
+     "web_brooklyn",
+     1,
+     0.685,
+     "web_brooklyn"
+    ],
+    [
+     "San Francisco bridge opening year",
+     "web_golden",
+     1,
+     0.6957,
+     "web_golden"
+    ],
+    [
+     "how do cells turn glucose into ATP",
+     "web_resp",
+     1,
+     0.6218,
+     "web_resp"
+    ],
+    [
+     "wedding photo with the cake",
+     "photo_wed",
+     1,
+     0.6834,
+     "photo_wed"
+    ],
+    [
+     "kids at the beach picture",
+     "photo_beach",
+     1,
+     0.7532,
+     "photo_beach"
+    ]
+   ]
+  },
+  {
+   "config": "egemma-prompted",
+   "mode": "egemma",
+   "dims": 768,
+   "hit1": 0.8275862068965517,
+   "hit3": 1.0,
+   "mrr": 0.9138,
+   "margin_mean": 0.3503,
+   "margins": [
+    0.3429,
+    0.3952,
+    0.325,
+    0.3381
+   ],
+   "ms_per_doc": 31.3,
+   "ms_per_query": 15.4,
+   "ranks": [
+    [
+     "how does binary search work",
+     "code1",
+     1,
+     0.6059,
+     "code1"
+    ],
+    [
+     "right to be forgotten under EU data protection law",
+     "law2",
+     2,
+     0.5199,
+     "law_a17"
+    ],
+    [
+     "what drug treats osteoarthritis inflammation",
+     "med1",
+     1,
+     0.6079,
+     "med1"
+    ],
+    [
+     "how much do I owe on the March electricity bill",
+     "home1",
+     1,
+     0.6363,
+     "home1"
+    ],
+    [
+     "when was the Eiffel Tower built",
+     "web1",
+     1,
+     0.5606,
+     "web1"
+    ],
+    [
+     "how do plants make oxygen",
+     "web2",
+     1,
+     0.4889,
+     "web2"
+    ],
+    [
+     "picture of kids at a birthday celebration",
+     "photo1",
+     2,
+     0.6504,
+     "photo_bday"
+    ],
+    [
+     "which quarter had the highest revenue",
+     "chart1",
+     2,
+     0.6042,
+     "chart_rev"
+    ],
+    [
+     "antibiotic for strep throat",
+     "med3",
+     1,
+     0.6221,
+     "med3"
+    ],
+    [
+     "can I quit my lease if the apartment is uninhabitable",
+     "law1",
+     1,
+     0.5695,
+     "law1"
+    ],
+    [
+     "how much is the April electricity bill",
+     "inv_apr",
+     2,
+     0.567,
+     "home1"
+    ],
+    [
+     "March power bill total",
+     "inv_mar",
+     2,
+     0.6361,
+     "home1"
+    ],
+    [
+     "what do I pay for internet",
+     "inv_net",
+     1,
+     0.4068,
+     "inv_net"
+    ],
+    [
+     "gas bill due date April",
+     "inv_gas",
+     1,
+     0.5694,
+     "inv_gas"
+    ],
+    [
+     "COX-2 selective arthritis drug easy on the stomach",
+     "med_cele",
+     1,
+     0.7077,
+     "med_cele"
+    ],
+    [
+     "long acting NSAID for chronic joint pain twice a day",
+     "med_nap",
+     1,
+     0.7294,
+     "med_nap"
+    ],
+    [
+     "antibiotic option when allergic to penicillin",
+     "med_peni",
+     1,
+     0.6687,
+     "med_peni"
+    ],
+    [
+     "right to receive my data in machine readable form",
+     "law_a20",
+     1,
+     0.5897,
+     "law_a20"
+    ],
+    [
+     "which GDPR article covers deleting my data",
+     "law_a17",
+     1,
+     0.6771,
+     "law_a17"
+    ],
+    [
+     "can I sublet my apartment",
+     "law_sublet",
+     1,
+     0.5854,
+     "law_sublet"
+    ],
+    [
+     "when do I get my rental deposit back",
+     "law_deposit",
+     1,
+     0.5919,
+     "law_deposit"
+    ],
+    [
+     "sorting algorithm that partitions around a pivot",
+     "code_quick",
+     1,
+     0.6278,
+     "code_quick"
+    ],
+    [
+     "difference of rebase from merge linear history",
+     "code_rebase",
+     1,
+     0.6211,
+     "code_rebase"
+    ],
+    [
+     "systemd only restart when the service crashes",
+     "code_restart",
+     1,
+     0.6019,
+     "code_restart"
+    ],
+    [
+     "bridge that opened in 1883",
+     "web_brooklyn",
+     1,
+     0.5621,
+     "web_brooklyn"
+    ],
+    [
+     "San Francisco bridge opening year",
+     "web_golden",
+     1,
+     0.6108,
+     "web_golden"
+    ],
+    [
+     "how do cells turn glucose into ATP",
+     "web_resp",
+     1,
+     0.5468,
+     "web_resp"
+    ],
+    [
+     "wedding photo with the cake",
+     "photo_wed",
+     1,
+     0.6033,
+     "photo_wed"
+    ],
+    [
+     "kids at the beach picture",
+     "photo_beach",
+     1,
+     0.6565,
+     "photo_beach"
+    ]
+   ]
+  }
+ ]
+}

@@ -124,3 +124,36 @@ both used by the phase-3 ingest design (`bench/phase3-ingest-program.md`).
   --no-warmup` + the same CPU-safe overrides. **Revert** = point `-m` back
   to `/opt/nomic-embed-text-v1.5.Q8_0.gguf` (still on disk) and drop
   `--pooling mean --no-warmup`.
+
+## Update 2026-07-05 later (phase-3 I13): Qwen3-Embedding-0.6B, canonical, is the sidecar
+
+F16 is FIXED by `patches/0019-qwen3-pooled-embeddings-no-out-ids.patch`
+(qwen3 builds no `out_ids` and keeps all rows for pooled embeddings — the
+fork's LAST-pooling output exemption from patch 0015 otherwise leaves
+`inp_cls` holding absolute rows into a subset tensor). With Qwen3 running
+CANONICALLY (`--pooling last`, instructed queries), the hardened
+confusable fixture (`embed_ab.py --hard`, 48 docs / 29 queries) flips the
+verdict:
+
+| config | dims | hit@1 | MRR | ms/doc |
+|---|---|---|---|---|
+| **qwen3-raw (last)** | 1024 | **0.93** | **0.966** | 117 |
+| **qwen3-instr (last)** | 1024 | 0.90 | 0.948 | 117 |
+| egemma-raw | 768 | 0.83 | 0.914 | 25 |
+| egemma-prompted | 768 | 0.83 | 0.914 | 31 |
+
+Deployed unit now runs the **patched bare engine as a separate file**
+(`/opt/embed-engine.llamafile` — the prod APE is untouched):
+
+```ini
+[Service]
+Environment=LLAMAFILE_NO_VOICE=1
+ExecStart=/bin/sh /opt/embed-engine.llamafile --server -m /opt/qwen3-embedding-0.6b-q8_0.gguf --embeddings --pooling last --port 8081 --host 127.0.0.1 -ngl 0 --spec-type none --no-mmproj -c 2048 -ub 512 -np 2 --threads 4
+```
+
+- The bare engine needs an explicit `--server` (the packaged APE's baked
+  `.args` supplies it; without it you get the legacy CLI).
+- Query-side instructions: `Instruct: {task}\nQuery: {q}`; documents embed
+  bare. Dims 1024 (MRL-truncatable). Apache-2.0 license.
+- Fallbacks kept on disk: `embeddinggemma-300m-q8_0.gguf` (+`--pooling
+  mean`) and `nomic-embed-text-v1.5.Q8_0.gguf`.

@@ -933,3 +933,51 @@ dedicated text embedder, enrichment JSON doubles as the BM25 corpus.
   these clean renders do; photographed fixtures queued with I5.
 - **NEXT**: I4 enrichment call (ingest.v1 schema + grammar + thinking off,
   OCR-authoritative prompt framing per F20); backlog I1b, I13.
+
+## I13 ✅ (2026-07-05) — F16 FIXED; canonical Qwen3-Embedding wins and SHIPS
+Sebastian's steer executed: Qwen3-Embedding-0.6B unblocked, judged fairly,
+and deployed. Includes I1b (hardened fixture).
+- **Root cause of F16 (not upstream drift — a fork-design interaction):**
+  `patches/0015-gpu-media-embeddings-last-pooling.patch` deliberately exempts
+  LAST pooling from the "pooled embeddings ⇒ all tokens output" rule so
+  Gemma-4 MEDIA embeddings decode like generation (the GPU-segfault
+  workaround). But upstream model builders (qwen3.cpp) subset the hidden
+  state to output rows via `inp_out_ids` at the last layer, while
+  `inp_cls` (LAST-pooling row selector) holds ABSOLUTE batch rows →
+  `ggml_get_rows` OOB on any partial-output batch. Trigger was the server's
+  slot-init probe `common_context_can_seq_rm()` (2-token decode, last-only
+  output). Gemma-4's own builder guards its subsetting behind
+  `embeddings_nextn_masked` — that's why the fork never saw this.
+- **Fix (`patches/0019-qwen3-pooled-embeddings-no-out-ids.patch`):** in
+  qwen3.cpp, build NO out_ids input and keep all rows when
+  `cparams.embeddings && pooling != NONE` — upstream-equivalent semantics
+  (upstream's forced all-outputs makes the subset an identity). First
+  attempt kept `build_inp_out_ids()` and only skipped the get_rows → NEW
+  crash `GGML_ASSERT(buffer)` (a built-but-unconsumed graph input is never
+  allocated; its set_input touches a null buffer). Lesson: **unused graph
+  inputs are not benign in this llama.cpp generation — don't build them.**
+- **Verified**: host engine (bin/llamafile, incremental make build) boots
+  qwen3 `--pooling last` clean incl. warmup + slot probe; margins
+  cat/kitten 0.858 vs cat/spreadsheet 0.548 (+0.310 vs mean-pooled +0.131).
+  Trap re-hit: bare engine needs explicit `--server` (packaged .args
+  supplies it; without it you get the legacy CLI). Also re-hit the pkill
+  self-match trap (bash exit 144) — fuser -k -n tcp is the safe kill.
+- **I1b hard A/B** (48 docs / 29 queries with near-duplicate confusables —
+  same-vendor invoices, NSAID family, adjacent GDPR articles, similar
+  bridges/photos; `embed_ab.py --hard`): **qwen3-canonical hit@1 0.93
+  (raw) / 0.90 (instr), MRR 0.966/0.948 BEATS egemma-prompted 0.83/0.914**;
+  margins +0.322 vs +0.350; cost 117 vs 31 ms/doc host CPU (embedding is
+  NOT the pipeline bottleneck — enrichment is). raw-vs-instr = 1 query
+  (noise at n=29); shipping the program's canonical instructed-query form.
+- **SHIPPED**: CT 118 `embed.service` → `/opt/embed-engine.llamafile`
+  (patched engine, SEPARATE file — prod main binary untouched) + qwen3
+  `--pooling last` + LLAMAFILE_NO_VOICE=1. e2e verified via tailnet
+  `/embed/v1` (api_probe sidecar PASS, dims=1024) + prod main/tts healthy.
+  Rollback: egemma + nomic GGUFs still in /opt; revert = swap -m (+
+  --pooling mean) or point ExecStart back at the prod APE.
+- **Upstream policy note**: vendored llama.cpp AGENTS.md prohibits
+  AI-generated contributions upstream (private forks exempt). This loop
+  therefore NEVER pushes/PRs to ggml-org remotes; fixes live as fork
+  patches. If the fork ever syncs upstream's real fix for this, drop 0019.
+- **NEXT**: I4 enrichment call (unchanged); embeddings stack is now final
+  for the phase (qwen3-canonical, 1024-dim, instructed queries).
