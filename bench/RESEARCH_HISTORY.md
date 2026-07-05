@@ -683,6 +683,47 @@ once." H10 MEASURES it (the G8→G9 pattern: validate your own recommendation).
    caching for the multi-turn case.
 Chart: `data/h10_promptcache_20260705.png`.
 
+### E20 — H11: decode speed vs context depth — it's MTP-acceptance-bound, non-monotonic (SUCCESS, confound→finding; iteration 20)
+Completes the latency model (H9 prefill, H10 caching, H11 decode). `bench/
+h11_decode.py`, judge-free (server timings incl. `draft_n`/`draft_n_accepted`).
+Data: `data/h11_decode_20260705.json`.
+
+**A — decode + MTP acceptance vs depth (predictable filler, 128-tok gen):**
+| context | decode tok/s | MTP acceptance |
+|---|---|---|
+| 741 | 93 | 0.23 |
+| 11 841 | **137** | **0.49** |
+| 47 361 | 42 | 0.01 |
+| 74 001 | 36 | 0.00 |
+
+**B — same ~2K context, different content:**
+| content | decode tok/s | acceptance |
+|---|---|---|
+| predictable (filler cont.) | 77 | 0.15 |
+| novel (random nouns) | 60 | 0.06 |
+
+**Findings:**
+1. **Decode speed is NON-MONOTONIC in depth and tracks MTP draft acceptance,
+   not KV size directly.** It PEAKS at mid-context (137 tok/s @ 16K, acceptance
+   0.49) and COLLAPSES at deep context (36–42 tok/s @ 47–74K, acceptance ≈ 0).
+   Speculative decoding stops helping past ~mid-context on this build.
+2. **B isolates the driver:** at identical context, predictable content decodes
+   ~28% faster than novel (77 vs 60 tok/s) because more drafts are accepted
+   (0.15 vs 0.06). Acceptance → decode speed, cleanly.
+3. **Practical:** deep-context GENERATION is ~2.5–3.5× slower than mid-context
+   (36 vs 137 tok/s) — a real cost on top of H9's prefill cost, and NOT fixed by
+   caching (H10 fixes prefill, not decode). For long outputs at deep context,
+   budget for ~40 tok/s.
+
+**Process note (confound→finding):** the first smoke showed decode FASTER at 16K
+than 1K, which looked like "depth speeds decode" — wrong. The timings expose
+draft stats, revealing the repetitive filler was inflating MTP acceptance. Per-
+request spec-disable is ignored by the server, so I couldn't null MTP out;
+instead I MEASURED acceptance and added the predictable/novel contrast (B) that
+isolates it. Caveat: acceptance is noisy run-to-run (depends on the exact tokens
+generated at temp 1.0) — the SHAPE (peak-then-collapse; predictable>novel) is the
+finding, not the precise values.
+
 ## Meta-lesson (iterations 11-15)
 Small-n composite scores are for GATING (does anything regress?), not RANKING
 (which prompt is best). Rank on powered, targeted sub-experiments (G8 jailbreak
@@ -690,6 +731,10 @@ n=4/probe; the acc/soph sub-scores that agree across runs), not on a 1-point
 serve_score delta. This is the E4→E5 lesson, now generalized.
 
 ## Goals (phase 2)
+- **H11 ✅ (E20, it.20)** Decode speed is MTP-acceptance-bound, non-monotonic:
+  peaks 137 tok/s @ 16K then collapses to ~36 @ 74K as draft acceptance dies;
+  predictable content decodes faster than novel at fixed ctx. Completes the
+  latency model (prefill H9 / cache H10 / decode H11).
 - **H10 ✅ (E19, it.19)** Prompt cache: cold→warm prefill 4109→22 ms (~185×,
   99% saved), stable across turns, prefix-matched (new ctx cold again).
   Validates the H9 recommendation — deep-context prefill is paid once, so

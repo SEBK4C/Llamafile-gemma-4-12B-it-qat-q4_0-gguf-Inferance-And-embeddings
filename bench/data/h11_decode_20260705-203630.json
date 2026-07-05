@@ -1,0 +1,40 @@
+{
+ "suite": "h11_decode",
+ "reps": 3,
+ "n_predict": 128,
+ "vs_depth": [
+  {
+   "actual_tokens": 741,
+   "decode_tok_s": 93.12,
+   "accept": 0.23
+  },
+  {
+   "actual_tokens": 11841,
+   "decode_tok_s": 137.04,
+   "accept": 0.49
+  },
+  {
+   "actual_tokens": 47361,
+   "decode_tok_s": 42.17,
+   "accept": 0.01
+  },
+  {
+   "actual_tokens": 74001,
+   "decode_tok_s": 36.41,
+   "accept": 0.0
+  }
+ ],
+ "vs_predictability": [
+  {
+   "content": "predictable",
+   "decode_tok_s": 77.38,
+   "accept": 0.15
+  },
+  {
+   "content": "novel",
+   "decode_tok_s": 59.93,
+   "accept": 0.06
+  }
+ ],
+ "stamp": "20260705-203630"
+}
