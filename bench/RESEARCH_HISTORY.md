@@ -332,11 +332,36 @@ Honest scope note: these are SMALL tasks; long-context refactors remain out of
 scope for a 12B — the doc's warning stays. Data:
 `data/harness_e2e_20260705.json`; chart: `data/harness_e2e_20260705.png`.
 
+### F11 — OpenCode headless hang: stdin, not the server (iteration 8)
+First E9b attempt "failed": `opencode run` under `pct exec` sat 360s with an
+EMPTY log and no artifact. Not a model/server issue — `opencode models` listed
+the provider and init completed; the process was **waiting on never-closing
+non-TTY stdin**. Fix: `opencode run "..." < /dev/null`. With it, the identical
+task passed in 8s. Lesson for all harness tests: distinguish "harness can't
+drive the model" from "harness blocked on environment plumbing" BEFORE
+recording a failure — check logs for whether a request was ever sent.
+
+### E9 — OpenCode on the OpenAI-compat surface (SUCCESS after F11; iteration 8)
+CT 130, OpenCode 1.17.13, custom provider via `@ai-sdk/openai-compatible` →
+`baseURL .../v1`. Same task battery as E8 for comparability.
+
+| test | what | verdict |
+|---|---|---|
+| E9a | raw OpenAI function-call (curl, /v1/chat/completions tools) | **PASS** — finish_reason=tool_calls, args exact |
+| E9b | `opencode run` create hello.py + run | **PASS** — 8 s (after F11 stdin fix; first attempt hung = documented failure) |
+| E9c | `opencode run` fib.py + test_fib.py to green | **PASS** — 12 s; independently reproduced |
+
+Both agent surfaces now verified under real harnesses: **Anthropic
+/v1/messages (Claude Code)** and **OpenAI /v1/chat/completions function
+calling (OpenCode)**. OpenCode ran the same tasks slightly faster (leaner
+system prompt). Doc shipped: `docs/integrations/opencode.md`. Data appended to
+`data/harness_e2e_20260705.json`; chart regenerated.
+
 ## Goals (phase 2)
 - **H1 ✅ (E7)** Endpoint inventory + published one-command probe suite.
-- **H2 — Harness e2e in LXC.** ✅ **Claude Code (E8, iteration 7)** — remaining:
-  OpenCode, Cline/Kilo (OpenAI-compat), OpenClaw; one per iteration, reusing
-  CT 130. Each integration doc ships only after its e2e passes.
+- **H2 — Harness e2e in LXC.** ✅ **Claude Code (E8, it.7)**, ✅ **OpenCode (E9,
+  it.8)** — remaining: Cline/Kilo (OpenAI-compat, VS Code — headless-config
+  verification only), OpenClaw; reusing CT 130. Docs ship only after e2e passes.
 - **H3 — Embeddings that work.** Pooling flags vs dedicated
   EmbeddingGemma/nomic GGUF sidecar; benchmark vs F9 triplet + small STS set.
 - **H4 — Integration docs** (`docs/integrations/*.md`) adapted from

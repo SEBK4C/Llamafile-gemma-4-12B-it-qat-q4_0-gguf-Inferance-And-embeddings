@@ -16,11 +16,24 @@
   {"id": "E8c", "harness": "Claude Code 2.1.201", "surface": "/v1/messages (SSE, tools, count_tokens)",
    "task": "fib.py + test_fib.py (assert n=0..10), run tests to green",
    "verdict": "PASS", "wall_s": 12.5, "turns": 4,
-   "detail": "ALL TESTS PASSED independently reproduced; spot-check fib(10)=55, fib(20)=6765"}
+   "detail": "ALL TESTS PASSED independently reproduced; spot-check fib(10)=55, fib(20)=6765"},
+  {"id": "E9a", "harness": "raw curl", "surface": "/v1/chat/completions tools (OpenAI)",
+   "task": "get_weather function-call emit",
+   "verdict": "PASS", "wall_s": 1.5, "turns": 1,
+   "detail": "finish_reason=tool_calls; arguments {\"city\":\"Tokyo\"} exact"},
+  {"id": "E9b", "harness": "OpenCode 1.17.13", "surface": "/v1/chat/completions via @ai-sdk/openai-compatible",
+   "task": "create hello.py printing exact string, run to verify",
+   "verdict": "PASS", "wall_s": 8.0, "turns": null,
+   "detail": "artifact independently verified after fixing stdin hang (< /dev/null)"},
+  {"id": "E9c", "harness": "OpenCode 1.17.13", "surface": "/v1/chat/completions via @ai-sdk/openai-compatible",
+   "task": "fib.py + test_fib.py (assert n=0..10), run tests to green",
+   "verdict": "PASS", "wall_s": 12.0, "turns": null,
+   "detail": "ALL TESTS PASSED independently reproduced; fib(10)=55, fib(20)=6765"}
  ],
  "traps": [
   "LXC first start: TUN device appears only after restart; minimal debian-13 template lacks curl for hookscript",
   "@anthropic-ai/claude-code EBADENGINE on Node 20.19 -> silent broken install (no bin); Node 22 required",
-  "run as root needs IS_SANDBOX=1 for --dangerously-skip-permissions"
+  "run as root needs IS_SANDBOX=1 for --dangerously-skip-permissions (Claude Code)",
+  "opencode run HANGS FOREVER without a TTY unless stdin is redirected: append < /dev/null in scripts/CI (empty log, no error)"
  ]
 }
