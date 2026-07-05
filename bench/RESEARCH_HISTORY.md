@@ -815,3 +815,50 @@ to CT 118 `gemma.service`:
 - iteration 6 (2026-07-05): api_probe.py + chart generator + run data + chart →
   GitHub `cuda-3080ti-optim`; data+chart → HF dataset
   SEBK4C/gemma4-serving-bench-data.
+
+# PHASE 3 — multimodal ingest → text-normalized embeddings (2026-07-05→)
+
+Program: `bench/phase3-ingest-program.md` (Sebastian's redirect 2026-07-05;
+I-goals I1–I12). Architecture rationale: docs/mm-embedding.md modality-gap
+dead end + F9/F12 → normalize every modality to enriched text, embed with a
+dedicated text embedder, enrichment JSON doubles as the BM25 corpus.
+
+## I1 ✅ (2026-07-05) — embedder A/B: embeddinggemma-300m replaces nomic
+- **Setup**: three embedders served by the SAME gemma4 llamafile on CT 118
+  CPU (F12 pattern): nomic-v1.5 Q8 (:8081 prod), Qwen3-Embedding-0.6B Q8
+  (:8082 transient), embeddinggemma-300M Q8 ggml-org GGUF (:8083 transient).
+  Harness `bench/ingest/embed_ab.py` (stdlib-only, frozen fixture: 16 docs
+  across the 5 task domains, 10 gold queries, 4 margin triplets; each model
+  raw + canonical prompt format). Data: `bench/data/embed_ab_20260705.json`.
+- **F16 (fork bug)**: Qwen3-Embedding with its canonical `--pooling last`
+  ABORTS at graph reserve — `ggml-cpu/ops.cpp:4914
+  GGML_ASSERT(i01 >= 0 && i01 < ne01)` in `ggml_compute_forward_get_rows_f32`
+  (reserve batch feeds bogus row indices to the last-token row-selection;
+  nomic/egemma use mean pooling = no get_rows, load fine). Bisected: crash
+  persists with --no-warmup + nomic-exact sizing; switching ONLY the pooling
+  to mean fixes it. Fix path: sync upstream ggml/llama.cpp reserve-batch fix,
+  then re-test qwen3 canonically (new backlog item I13).
+- **F17 (ops hygiene)**: the APE spawns its baked Kokoro voice server even in
+  embeddings mode — a sidecar without `LLAMAFILE_NO_VOICE=1` fights prod
+  voice for :8078/:8079 (observed the transient binding both while prod
+  voice was in a respawn window). `voice.c:46` honors LLAMAFILE_NO_VOICE.
+  embed.service now sets it. Prod /health + /tts/health verified OK after.
+- **Results** (hit@1/hit@3 all 1.00 — fixture SATURATED at 16 docs, so
+  ranking used canonical-mode margins + speed): egemma-prompted margin
+  +0.350 @ 37 ms/doc vs nomic-prefixed +0.172 @ 28 ms/doc vs qwen3-mean
+  +0.131 @ ~125 ms/doc. egemma also brings instruction prompts (task:/
+  title: templates = phase-3 TASK taxonomy fit), MRL 768→128, multilingual.
+- **Shipped**: embed.service swapped to embeddinggemma-300m (`--pooling mean
+  --no-warmup` + LLAMAFILE_NO_VOICE=1); verified through the tailnet
+  `/embed/v1` path (api_probe sidecar test PASS: cos(cat,kitten)=0.886 >
+  cos(cat,spreadsheet)=0.593, dims 768) + prompted query→doc cosine 0.640.
+  Revert: `-m /opt/nomic-embed-text-v1.5.Q8_0.gguf` (kept on disk).
+  docs/embeddings.md updated. Transient A/B units stopped.
+- **Honest caveats**: (1) retrieval metric saturated — margins carried the
+  decision; I1b queued: ≥64-doc confusable-heavy corpus to re-rank
+  egemma vs nomic at power. (2) qwen3 was judged under NON-canonical
+  pooling; its true (last-pooled) quality is unknown here until F16 is
+  fixed. (3) Ledger `bench/ingest-results.tsv` started.
+- **NEXT**: I2 (PP-OCRv6 det+rec ONNX extractor + CER/pages-sec bench);
+  then I3 vision-legibility V-probe (gates enrichment design); I1b harder
+  fixture; I13 fork ggml sync for pooling-last.

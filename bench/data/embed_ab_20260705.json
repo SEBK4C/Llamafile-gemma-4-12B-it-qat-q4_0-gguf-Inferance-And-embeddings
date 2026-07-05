@@ -1,0 +1,543 @@
+{
+ "fixture": {
+  "docs": 16,
+  "queries": 10,
+  "triplets": 4
+ },
+ "results": [
+  {
+   "config": "nomic-raw",
+   "mode": "raw",
+   "dims": 768,
+   "hit1": 1.0,
+   "hit3": 1.0,
+   "mrr": 1.0,
+   "margin_mean": 0.377,
+   "margins": [
+    0.4645,
+    0.4484,
+    0.4793,
+    0.1159
+   ],
+   "ms_per_doc": 44.9,
+   "ms_per_query": 9.7,
+   "ranks": [
+    [
+     "how does binary search work",
+     "code1",
+     1,
+     0.7755,
+     "code1"
+    ],
+    [
+     "right to be forgotten under EU data protection law",
+     "law2",
+     1,
+     0.7037,
+     "law2"
+    ],
+    [
+     "what drug treats osteoarthritis inflammation",
+     "med1",
+     1,
+     0.7177,
+     "med1"
+    ],
+    [
+     "how much do I owe on the March electricity bill",
+     "home1",
+     1,
+     0.7668,
+     "home1"
+    ],
+    [
+     "when was the Eiffel Tower built",
+     "web1",
+     1,
+     0.8188,
+     "web1"
+    ],
+    [
+     "how do plants make oxygen",
+     "web2",
+     1,
+     0.7239,
+     "web2"
+    ],
+    [
+     "picture of kids at a birthday celebration",
+     "photo1",
+     1,
+     0.7841,
+     "photo1"
+    ],
+    [
+     "which quarter had the highest revenue",
+     "chart1",
+     1,
+     0.7679,
+     "chart1"
+    ],
+    [
+     "antibiotic for strep throat",
+     "med3",
+     1,
+     0.8046,
+     "med3"
+    ],
+    [
+     "can I quit my lease if the apartment is uninhabitable",
+     "law1",
+     1,
+     0.7631,
+     "law1"
+    ]
+   ]
+  },
+  {
+   "config": "nomic-prefixed",
+   "mode": "nomic",
+   "dims": 768,
+   "hit1": 1.0,
+   "hit3": 1.0,
+   "mrr": 1.0,
+   "margin_mean": 0.1718,
+   "margins": [
+    0.1964,
+    0.2229,
+    0.1808,
+    0.087
+   ],
+   "ms_per_doc": 27.8,
+   "ms_per_query": 12.7,
+   "ranks": [
+    [
+     "how does binary search work",
+     "code1",
+     1,
+     0.7973,
+     "code1"
+    ],
+    [
+     "right to be forgotten under EU data protection law",
+     "law2",
+     1,
+     0.7114,
+     "law2"
+    ],
+    [
+     "what drug treats osteoarthritis inflammation",
+     "med1",
+     1,
+     0.734,
+     "med1"
+    ],
+    [
+     "how much do I owe on the March electricity bill",
+     "home1",
+     1,
+     0.8007,
+     "home1"
+    ],
+    [
+     "when was the Eiffel Tower built",
+     "web1",
+     1,
+     0.8797,
+     "web1"
+    ],
+    [
+     "how do plants make oxygen",
+     "web2",
+     1,
+     0.737,
+     "web2"
+    ],
+    [
+     "picture of kids at a birthday celebration",
+     "photo1",
+     1,
+     0.7607,
+     "photo1"
+    ],
+    [
+     "which quarter had the highest revenue",
+     "chart1",
+     1,
+     0.7289,
+     "chart1"
+    ],
+    [
+     "antibiotic for strep throat",
+     "med3",
+     1,
+     0.7801,
+     "med3"
+    ],
+    [
+     "can I quit my lease if the apartment is uninhabitable",
+     "law1",
+     1,
+     0.7168,
+     "law1"
+    ]
+   ]
+  },
+  {
+   "config": "qwen3mean-raw",
+   "mode": "raw",
+   "dims": 1024,
+   "hit1": 1.0,
+   "hit3": 1.0,
+   "mrr": 1.0,
+   "margin_mean": 0.131,
+   "margins": [
+    0.0876,
+    0.061,
+    0.1761,
+    0.1991
+   ],
+   "ms_per_doc": 127.4,
+   "ms_per_query": 59.1,
+   "ranks": [
+    [
+     "how does binary search work",
+     "code1",
+     1,
+     0.8049,
+     "code1"
+    ],
+    [
+     "right to be forgotten under EU data protection law",
+     "law2",
+     1,
+     0.8466,
+     "law2"
+    ],
+    [
+     "what drug treats osteoarthritis inflammation",
+     "med1",
+     1,
+     0.8549,
+     "med1"
+    ],
+    [
+     "how much do I owe on the March electricity bill",
+     "home1",
+     1,
+     0.8218,
+     "home1"
+    ],
+    [
+     "when was the Eiffel Tower built",
+     "web1",
+     1,
+     0.8711,
+     "web1"
+    ],
+    [
+     "how do plants make oxygen",
+     "web2",
+     1,
+     0.7748,
+     "web2"
+    ],
+    [
+     "picture of kids at a birthday celebration",
+     "photo1",
+     1,
+     0.8445,
+     "photo1"
+    ],
+    [
+     "which quarter had the highest revenue",
+     "chart1",
+     1,
+     0.76,
+     "chart1"
+    ],
+    [
+     "antibiotic for strep throat",
+     "med3",
+     1,
+     0.8437,
+     "med3"
+    ],
+    [
+     "can I quit my lease if the apartment is uninhabitable",
+     "law1",
+     1,
+     0.8472,
+     "law1"
+    ]
+   ]
+  },
+  {
+   "config": "qwen3mean-instr",
+   "mode": "qwen3",
+   "dims": 1024,
+   "hit1": 1.0,
+   "hit3": 1.0,
+   "mrr": 1.0,
+   "margin_mean": 0.131,
+   "margins": [
+    0.0876,
+    0.061,
+    0.1761,
+    0.1991
+   ],
+   "ms_per_doc": 122.1,
+   "ms_per_query": 135.9,
+   "ranks": [
+    [
+     "how does binary search work",
+     "code1",
+     1,
+     0.5985,
+     "code1"
+    ],
+    [
+     "right to be forgotten under EU data protection law",
+     "law2",
+     1,
+     0.7449,
+     "law2"
+    ],
+    [
+     "what drug treats osteoarthritis inflammation",
+     "med1",
+     1,
+     0.6508,
+     "med1"
+    ],
+    [
+     "how much do I owe on the March electricity bill",
+     "home1",
+     1,
+     0.6693,
+     "home1"
+    ],
+    [
+     "when was the Eiffel Tower built",
+     "web1",
+     1,
+     0.6642,
+     "web1"
+    ],
+    [
+     "how do plants make oxygen",
+     "web2",
+     1,
+     0.6117,
+     "web2"
+    ],
+    [
+     "picture of kids at a birthday celebration",
+     "photo1",
+     1,
+     0.6933,
+     "photo1"
+    ],
+    [
+     "which quarter had the highest revenue",
+     "chart1",
+     1,
+     0.5889,
+     "chart1"
+    ],
+    [
+     "antibiotic for strep throat",
+     "med3",
+     1,
+     0.6011,
+     "med3"
+    ],
+    [
+     "can I quit my lease if the apartment is uninhabitable",
+     "law1",
+     1,
+     0.7602,
+     "law1"
+    ]
+   ]
+  },
+  {
+   "config": "egemma-raw",
+   "mode": "raw",
+   "dims": 768,
+   "hit1": 1.0,
+   "hit3": 1.0,
+   "mrr": 1.0,
+   "margin_mean": 0.2671,
+   "margins": [
+    0.2916,
+    0.3001,
+    0.2364,
+    0.2403
+   ],
+   "ms_per_doc": 30.7,
+   "ms_per_query": 9.6,
+   "ranks": [
+    [
+     "how does binary search work",
+     "code1",
+     1,
+     0.6082,
+     "code1"
+    ],
+    [
+     "right to be forgotten under EU data protection law",
+     "law2",
+     1,
+     0.6193,
+     "law2"
+    ],
+    [
+     "what drug treats osteoarthritis inflammation",
+     "med1",
+     1,
+     0.6547,
+     "med1"
+    ],
+    [
+     "how much do I owe on the March electricity bill",
+     "home1",
+     1,
+     0.6767,
+     "home1"
+    ],
+    [
+     "when was the Eiffel Tower built",
+     "web1",
+     1,
+     0.6828,
+     "web1"
+    ],
+    [
+     "how do plants make oxygen",
+     "web2",
+     1,
+     0.5512,
+     "web2"
+    ],
+    [
+     "picture of kids at a birthday celebration",
+     "photo1",
+     1,
+     0.7569,
+     "photo1"
+    ],
+    [
+     "which quarter had the highest revenue",
+     "chart1",
+     1,
+     0.6254,
+     "chart1"
+    ],
+    [
+     "antibiotic for strep throat",
+     "med3",
+     1,
+     0.7214,
+     "med3"
+    ],
+    [
+     "can I quit my lease if the apartment is uninhabitable",
+     "law1",
+     1,
+     0.6552,
+     "law1"
+    ]
+   ]
+  },
+  {
+   "config": "egemma-prompted",
+   "mode": "egemma",
+   "dims": 768,
+   "hit1": 1.0,
+   "hit3": 1.0,
+   "mrr": 1.0,
+   "margin_mean": 0.3503,
+   "margins": [
+    0.3429,
+    0.3952,
+    0.325,
+    0.3381
+   ],
+   "ms_per_doc": 37.4,
+   "ms_per_query": 24.0,
+   "ranks": [
+    [
+     "how does binary search work",
+     "code1",
+     1,
+     0.6059,
+     "code1"
+    ],
+    [
+     "right to be forgotten under EU data protection law",
+     "law2",
+     1,
+     0.5113,
+     "law2"
+    ],
+    [
+     "what drug treats osteoarthritis inflammation",
+     "med1",
+     1,
+     0.6079,
+     "med1"
+    ],
+    [
+     "how much do I owe on the March electricity bill",
+     "home1",
+     1,
+     0.6363,
+     "home1"
+    ],
+    [
+     "when was the Eiffel Tower built",
+     "web1",
+     1,
+     0.5606,
+     "web1"
+    ],
+    [
+     "how do plants make oxygen",
+     "web2",
+     1,
+     0.4889,
+     "web2"
+    ],
+    [
+     "picture of kids at a birthday celebration",
+     "photo1",
+     1,
+     0.6492,
+     "photo1"
+    ],
+    [
+     "which quarter had the highest revenue",
+     "chart1",
+     1,
+     0.5954,
+     "chart1"
+    ],
+    [
+     "antibiotic for strep throat",
+     "med3",
+     1,
+     0.6221,
+     "med3"
+    ],
+    [
+     "can I quit my lease if the apartment is uninhabitable",
+     "law1",
+     1,
+     0.5695,
+     "law1"
+    ]
+   ]
+  }
+ ]
+}

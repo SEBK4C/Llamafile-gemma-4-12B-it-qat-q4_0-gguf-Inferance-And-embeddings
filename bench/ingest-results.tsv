@@ -1,0 +1,2 @@
+goal	date	fixture_set	cer	wer	schema_valid	hit1	hit5	mrr	docs_min	notes
+I1	2026-07-05	embed_ab_16doc_10q	-	-	-	1.00	1.00	1.000	-	all 6 configs saturate hit@1; canonical margins: egemma-prompted +0.350 (37ms/doc) > nomic-prefixed +0.172 (28ms/doc) > qwen3-mean-instr +0.131 (122ms/doc, F16 pooling-last fork crash forces mean); SHIPPED embeddinggemma-300m to embed.service; I1b harder fixture queued
