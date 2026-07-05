@@ -1,0 +1,397 @@
+{
+ "people": {
+  "summary": {
+   "n": 14,
+   "people_detected_rate": 1.0,
+   "caption_overlap_rate": 1.0,
+   "retrieval_hit1": 0.857,
+   "retrieval_mrr": 0.917
+  },
+  "items": [
+   {
+    "img": "img_00.jpg",
+    "valid": true,
+    "people_n": 1,
+    "overlap_words": 5,
+    "wall_s": 2.85,
+    "doc_text": "Man wearing a beer-branded beanie. A close-up photograph of a man wearing glasses and a knitted beanie featuring 'Bitz' beer branding. A medium close-up shot of a man in an indoor setting, likely a social gathering or pub. The background is blurred, showing other people and a bright light source. looking slightly to the side",
+    "query": "The man with pierced ears is wearing glasses and an orange hat.",
+    "retrieval_rank": 1
+   },
+   {
+    "img": "img_01.jpg",
+    "valid": true,
+    "people_n": 2,
+    "overlap_words": 13,
+    "wall_s": 3.11,
+    "doc_text": "Taekwondo Sparring Match. A photograph capturing a Taekwondo sparring match between a young girl and a man on a red and blue padded mat. An indoor sports arena with red and blue interlocking foam mats. A young girl in a white Taekwondo uniform (dobok) is standing and striking towards a man who is seated on the mat, holding a wooden board in a defensive posture. performing a high kick/strike blocking/defending with a wooden board",
+    "query": "A young female student performing a downward kick to break a board held by her Karate instructor.",
+    "retrieval_rank": 1
+   },
+   {
+    "img": "img_02.jpg",
+    "valid": true,
+    "people_n": 4,
+    "overlap_words": 22,
+    "wall_s": 3.56,
+    "doc_text": "Group of people in winter gear on snow. A group of four people wearing winter sports clothing, helmets, and goggles are standing in a snowy outdoor environment, likely a ski resort or mountain area. A snowy outdoor scene with evergreen trees in the background. Four individuals are positioned in the foreground, dressed in heavy winter jackets (black, white, red, and blue), snow pants, helmets, and goggles. A snowmobile is partially visible in the background behind the group. standing standing standing standing",
+    "query": "Five snowmobile riders all wearing helmets and goggles line up in a snowy clearing in a forest in front of their snowmobiles; they are all wearing black snow pants and from left to right they are wearing a black coat, white coat, red coat, blue coat, and black coat.",
+    "retrieval_rank": 1
+   },
+   {
+    "img": "img_03.jpg",
+    "valid": true,
+    "people_n": 3,
+    "overlap_words": 8,
+    "wall_s": 2.99,
+    "doc_text": "Roofing Work in Progress. A photograph showing three people performing maintenance or construction work on a residential roof. An outdoor daytime shot of a house with a brown shingled roof. Three men are visible: two are positioned on the roof slope, and one is standing on the ground near the gutter. The sky is blue with light clouds. working on the roof working on the roof standing on the ground/ladder observing or assisting",
+    "query": "Two men sitting on the roof of a house while another one stands on a ladder.",
+    "retrieval_rank": 1
+   },
+   {
+    "img": "img_04.jpg",
+    "valid": true,
+    "people_n": 8,
+    "overlap_words": 12,
+    "wall_s": 4.04,
+    "doc_text": "Wedding Party Group Photo. A group photo of a wedding party, including a bride in a white gown and several men in formal attire with hats, posed in front of a stone monument in a park setting. A photographer is visible in the foreground capturing the scene. An outdoor park setting with lush green trees in the background. A large grey stone monument stands behind a group of people. In the foreground, a man in a tan shirt is holding a camera. A fountain or pool edge is visible at the bottom of the frame. taking a photo posing for a photo posing for a photo posing for a photo posing for a photo posing for a photo posing for a photo posing for a photo",
+    "query": "A bride in a light pink dress poses for a picture with male relatives and is being photographed by a man in a cream shirt with white pants.",
+    "retrieval_rank": 1
+   },
+   {
+    "img": "img_05.jpg",
+    "valid": true,
+    "people_n": 1,
+    "overlap_words": 21,
+    "wall_s": 3.26,
+    "doc_text": "Group of people outside an ice structure. A group of approximately ten people, mostly children and young adults, are gathered outside a building constructed from large blocks of ice or snow. The setting is a snowy, wooded outdoor area. A group of people dressed in heavy winter gear (parkas, hats, gloves) are standing in a snowy forest clearing. They are gathered around a small, rectangular building made of translucent ice blocks with a wooden door. Some individuals are wearing backpacks and one person is standing on red skis. standing and looking at the ice structure",
+    "query": "A group of 11 people in winter wear such as beanies, skiing jackets, gloves and backpacks are standing in snow paddles outside a house made of ice blocks while a person in front of the door seems to be leading them.",
+    "retrieval_rank": 1
+   },
+   {
+    "img": "img_06.jpg",
+    "valid": true,
+    "people_n": 5,
+    "overlap_words": 17,
+    "wall_s": 4.67,
+    "doc_text": "Baseball Game Action Shot. A dynamic action shot of a baseball game featuring a runner sliding into a base while a fielder in a red jersey attempts to tag them. Other players and spectators are visible in the background behind a chain-link fence. An outdoor baseball field during a game. The foreground shows a dirt base path where a runner in a purple jersey and grey pants is sliding. A fielder in a red jersey with 'REDS' on the back is reaching out to tag the runner. In the background, there is a chain-link fence with several other players/b sliding into a base fielding/tagging standing/watching standing/watching standing/watching",
+    "query": "A baseball player in red leaps into the air to avoid a player in blue, who is shortly behind him as he catches the ball, while other blue team members look on in the background.",
+    "retrieval_rank": 1
+   },
+   {
+    "img": "img_07.jpg",
+    "valid": true,
+    "people_n": 1,
+    "overlap_words": 5,
+    "wall_s": 3.1,
+    "doc_text": "Construction worker on scaffolding. A vertical photograph showing a construction worker standing on a tall blue metal scaffolding structure against a building facade. A construction site featuring a tall, blue metal scaffolding system erected against a brick and glass building. A worker in a white shirt and blue pants is visible on one of the upper platforms, surrounded by wooden planks and construction materials. The sky is overcast and white. standing on scaffolding and working",
+    "query": "A man wearing a hat and a white shirt is cleaning windows.",
+    "retrieval_rank": 3
+   },
+   {
+    "img": "img_08.jpg",
+    "valid": true,
+    "people_n": 3,
+    "overlap_words": 15,
+    "wall_s": 3.61,
+    "doc_text": "Street Performer with Bicycle Sign. A street performer wearing a high-visibility vest and a red cap sits on a folding chair, holding a yellow sign with a bicycle icon. In the background, a woman and a young girl are sitting on a ledge. An outdoor urban setting, likely a plaza or sidewalk near a transit station. A man in a neon yellow safety vest sits behind a small table covered with a blue cloth. A woman and a child are seated on a concrete ledge behind him. A red plastic crate serves as a base for the table. performing/sitting sitting sitting",
+    "query": "A man wearing a reflective vest sits on the sidewalk and holds up pamphlets with bicycles on the cover.",
+    "retrieval_rank": 1
+   },
+   {
+    "img": "img_09.jpg",
+    "valid": true,
+    "people_n": 2,
+    "overlap_words": 4,
+    "wall_s": 3.84,
+    "doc_text": "Woman holding a baby in front of a building. A close-up photograph of a woman with short dark hair holding a young baby in her arms. They are positioned outdoors in front of a row of historic-style buildings with balconies, partially shaded by a large tree. An outdoor urban setting featuring a woman and a baby. The background shows multi-story buildings with architectural details like balconies and large windows, typical of a historic district. A large tree with green leaves provides shade from above. holding a baby being held",
+    "query": "A mother decides to take her child on a piggyback ride outside their apartment complex.",
+    "retrieval_rank": 1
+   },
+   {
+    "img": "img_10.jpg",
+    "valid": true,
+    "people_n": 3,
+    "overlap_words": 13,
+    "wall_s": 3.78,
+    "doc_text": "Beach Volleyball Tournament Scene. A wide-angle outdoor photograph of a beach volleyball tournament taking place on a sunny day. Several players are visible on the sand, and the background features a large spectator area with various corporate sponsorship banners including Crocs, Bud Light, and Nautica. A bright, sunny beach volleyball court with a crowd of spectators in the background. The court is lined with various commercial banners and tents. The sky is clear blue. playing volleyball playing volleyball standing on sand",
+    "query": "A male volleyball player in red trunks tries to block the shot of the opposing player during a professional volleyball game.",
+    "retrieval_rank": 1
+   },
+   {
+    "img": "img_11.jpg",
+    "valid": true,
+    "people_n": 1,
+    "overlap_words": 12,
+    "wall_s": 3.59,
+    "doc_text": "Bakery and Deli Interior. A photograph of a woman standing in a bakery or deli, holding a large loaf of bread. The background features a menu board listing salads and sandwiches, and shelves stocked with various breads. An indoor commercial kitchen or bakery setting with red walls. A woman in a pink shirt and red apron stands in the foreground. Behind her is a counter with a microwave, a small television, and various bread products. A large black menu board hangs on the wall. standing and holding a loaf of bread",
+    "query": "A woman wearing a pink shirt and red apron stands in her restaurant holding food and surrounded by bagged breads, a microwave and the chalkboard menu up on the wall.",
+    "retrieval_rank": 1
+   },
+   {
+    "img": "img_12.jpg",
+    "valid": true,
+    "people_n": 1,
+    "overlap_words": 4,
+    "wall_s": 2.39,
+    "doc_text": "Man holding a small object. A medium shot of a man sitting indoors, looking down and holding a small, dark object in his hands. An indoor living room setting with a couch, a lamp, and curtains in the background. The lighting is warm and slightly dim. holding a small object and looking down",
+    "query": "An Asian man in spectacles and a t-shirt preparing some food.",
+    "retrieval_rank": 2
+   },
+   {
+    "img": "img_13.jpg",
+    "valid": true,
+    "people_n": 3,
+    "overlap_words": 8,
+    "wall_s": 3.45,
+    "doc_text": "People exploring a cave with a light beam. A photograph showing three people with helmets exploring a large, dark cave. A prominent beam of light shines down from an opening in the ceiling onto the group. A dark, cavernous underground space with rugged rock walls. A bright, vertical beam of light pierces through a hole in the ceiling, illuminating a group of three explorers. The explorers are wearing helmets and outdoor gear. The atmosphere is moody and adventurous. sitting on a rock standing/crouching standing",
+    "query": "Spelunkers pose inside a rock cavern while bathed in sunlight from the surface.",
+    "retrieval_rank": 1
+   }
+  ]
+ },
+ "funsd": {
+  "summary": {
+   "n": 8,
+   "mean_f1": 0.925
+  },
+  "items": [
+   {
+    "img": "82092117.png",
+    "precision": 0.994,
+    "recall": 0.725,
+    "f1": 0.839,
+    "ms": 1936.2,
+    "gt_words": 222
+   },
+   {
+    "img": "82200067_0069.png",
+    "precision": 0.893,
+    "recall": 0.869,
+    "f1": 0.881,
+    "ms": 1721.0,
+    "gt_words": 153
+   },
+   {
+    "img": "82250337_0338.png",
+    "precision": 0.965,
+    "recall": 0.911,
+    "f1": 0.938,
+    "ms": 1671.8,
+    "gt_words": 214
+   },
+   {
+    "img": "82251504.png",
+    "precision": 0.927,
+    "recall": 0.964,
+    "f1": 0.945,
+    "ms": 1602.7,
+    "gt_words": 224
+   },
+   {
+    "img": "82252956_2958.png",
+    "precision": 0.965,
+    "recall": 0.974,
+    "f1": 0.969,
+    "ms": 1448.6,
+    "gt_words": 114
+   },
+   {
+    "img": "82253058_3059.png",
+    "precision": 0.933,
+    "recall": 0.902,
+    "f1": 0.917,
+    "ms": 1568.7,
+    "gt_words": 184
+   },
+   {
+    "img": "82253245_3247.png",
+    "precision": 0.978,
+    "recall": 0.966,
+    "f1": 0.972,
+    "ms": 1855.4,
+    "gt_words": 233
+   },
+   {
+    "img": "82253362_3364.png",
+    "precision": 0.935,
+    "recall": 0.94,
+    "f1": 0.938,
+    "ms": 1991.0,
+    "gt_words": 216
+   }
+  ]
+ },
+ "stt": {
+  "summary": {
+   "n": 10,
+   "mean_wer": 0.03,
+   "median_wer": 0.026
+  },
+  "items": [
+   {
+    "utt": "utt_00.wav",
+    "wer": 0.026,
+    "wall_s": 0.8,
+    "ref": "they were absorbed in his theology and were under the dominion of his name while that which was truly great and truly characteristic in him his effort to realize and connect abstractions was not understood by them at all",
+    "hyp": "they were absorbed in his theology and were under the dominion of his name while that which was truly great and truly correct in him his effort to realize and connect abstractions was not understood by them at all"
+   },
+   {
+    "utt": "utt_01.wav",
+    "wer": 0.026,
+    "wall_s": 0.48,
+    "ref": "when this had been accomplished the boolooroo leaned over to try to discover why the frame rolled away seemingly of its own accord and he was the more puzzled because it had never done such a thing before",
+    "hyp": "when this had been accomplished the bulleroo leaned over to try to discover why the frame rolled away seemingly of its own accord and he was the more puzzled because it had never done such a thing before"
+   },
+   {
+    "utt": "utt_02.wav",
+    "wer": 0.0,
+    "wall_s": 0.3,
+    "ref": "why if we erect a station at the falls it is a great economy to get it up to the city",
+    "hyp": "why if we erect a station at the falls it is a great economy to get it up to the city"
+   },
+   {
+    "utt": "utt_03.wav",
+    "wer": 0.044,
+    "wall_s": 0.55,
+    "ref": "i wish you good night she laid her bony hands on the back of mister meadowcroft's invalid chair cut him short in his farewell salutation to me and wheeled him out to his bed as if she were wheeling him out to his grave",
+    "hyp": "i wish you good-night she laid her bony hands on the back of mr metcalfe's invalid chair cut him short in his farewell salutation to me and wheeled him out to his bed as if she were wheeling him out to his grave"
+   },
+   {
+    "utt": "utt_04.wav",
+    "wer": 0.118,
+    "wall_s": 0.29,
+    "ref": "then said sir ferdinando there is nothing for it but that he must take you with him",
+    "hyp": "then said sir fernando there is nothing for it but that we must take you with him"
+   },
+   {
+    "utt": "utt_05.wav",
+    "wer": 0.0,
+    "wall_s": 0.18,
+    "ref": "all the furniture belonged to other times",
+    "hyp": "All the furniture belonged to other times."
+   },
+   {
+    "utt": "utt_06.wav",
+    "wer": 0.083,
+    "wall_s": 0.4,
+    "ref": "to night there was no need of extra heat and there were great ceremonies to be observed in lighting the fires on the hearthstones",
+    "hyp": "to-night there was no need of extra heat and there were great ceremonies to be observed in lighting the fires on the hearth-stones"
+   },
+   {
+    "utt": "utt_07.wav",
+    "wer": 0.0,
+    "wall_s": 0.2,
+    "ref": "he had broken into her courtyard",
+    "hyp": "He had broken into her courtyard"
+   },
+   {
+    "utt": "utt_08.wav",
+    "wer": 0.0,
+    "wall_s": 0.15,
+    "ref": "it was written in latin",
+    "hyp": "It was written in Latin."
+   },
+   {
+    "utt": "utt_09.wav",
+    "wer": 0.0,
+    "wall_s": 0.41,
+    "ref": "simply by stopping her carriage two or three times before the shop to have her snuff box filled and by saying aloud to the young girl who handed back the box that her snuff was the very best in paris",
+    "hyp": "simply by stopping her carriage two or three times before the shop to have her snuff-box filled and by saying aloud to the young girl who handed back the box that her snuff was the very best in paris"
+   }
+  ]
+ },
+ "sounds": {
+  "summary": {
+   "n": 12,
+   "category_hit_rate": 0.083
+  },
+  "items": [
+   {
+    "clip": "chainsaw.wav",
+    "category": "chainsaw",
+    "hit": false,
+    "wall_s": 0.43,
+    "description": "The audio clip features a high-pitched, distorted electronic sound that resembles a siren or a screeching noise."
+   },
+   {
+    "clip": "church_bells.wav",
+    "category": "church_bells",
+    "hit": false,
+    "wall_s": 0.36,
+    "description": "The audio clip features a high-pitched, rhythmic, and slightly distorted electronic sound, similar to a synthesizer or a digital beep."
+   },
+   {
+    "clip": "clock_alarm.wav",
+    "category": "clock_alarm",
+    "hit": true,
+    "wall_s": 0.34,
+    "description": "The audio clip features a high-pitched, rhythmic, and slightly distorted electronic sound, similar to a synthesizer or a digital beep."
+   },
+   {
+    "clip": "crying_baby.wav",
+    "category": "crying_baby",
+    "hit": false,
+    "wall_s": 0.28,
+    "description": "The audio features a high-pitched, distorted, and rhythmic electronic sound."
+   },
+   {
+    "clip": "dog.wav",
+    "category": "dog",
+    "hit": false,
+    "wall_s": 0.28,
+    "description": "The audio features a high-pitched, electronic beep."
+   },
+   {
+    "clip": "helicopter.wav",
+    "category": "helicopter",
+    "hit": false,
+    "wall_s": 0.26,
+    "description": "The audio clip features a high-pitched, rhythmic electronic beep."
+   },
+   {
+    "clip": "laughing.wav",
+    "category": "laughing",
+    "hit": false,
+    "wall_s": 0.28,
+    "description": "The audio clip features a high-pitched, electronic beep."
+   },
+   {
+    "clip": "rain.wav",
+    "category": "rain",
+    "hit": false,
+    "wall_s": 0.44,
+    "description": "I'm sorry, but I cannot hear any audio. Please provide the audio clip or a description of it so I can help you."
+   },
+   {
+    "clip": "rooster.wav",
+    "category": "rooster",
+    "hit": false,
+    "wall_s": 0.32,
+    "description": "The audio clip features a loud, distorted, and high-pitched electronic sound."
+   },
+   {
+    "clip": "sea_waves.wav",
+    "category": "sea_waves",
+    "hit": false,
+    "wall_s": 0.28,
+    "description": "The audio clip features a high-pitched, rhythmic electronic beep."
+   },
+   {
+    "clip": "siren.wav",
+    "category": "siren",
+    "hit": false,
+    "wall_s": 0.35,
+    "description": "The audio clip features a high-pitched, rhythmic, and slightly distorted electronic sound, similar to a synthesizer or a digital beep."
+   },
+   {
+    "clip": "thunderstorm.wav",
+    "category": "thunderstorm",
+    "hit": false,
+    "wall_s": 0.28,
+    "description": "The audio features a high-pitched, rhythmic electronic beep."
+   }
+  ],
+  "note": "F22: identical 0.083 hit rate raw AND after client-side 16k-mono resample; control: the SAME resample path transcribes LibriSpeech speech near-verbatim. Conclusion: native audio encoder is SPEECH-ONLY; non-speech description needs a tagging sidecar (I15)."
+ }
+}

@@ -164,6 +164,20 @@ the query router applies at search time.
   Runs on CT 118 (:8090) or harness-lab CT 130; tailnet-only.
 - **I8 — Audio path.** Segmented Gemma-4 STT vs whisperfile baseline on
   fixture clips (WER + speed). Pick default; loser stays as fallback flag.
+  *(I14 update: core question ANSWERED — native STT scores WER 0.030 on
+  LibriSpeech test-clean subset at 16 kHz. Remaining I8 scope: long-form
+  segmentation (1–5 min windows) + non-16k input normalization
+  (`real_eval.to_16k_mono_wav`). Whisperfile baseline optional now.)*
+- **I15 — (optional) sound-tagging sidecar.** F22: the native audio
+  encoder is SPEECH-ONLY — ESC-50 description scored 0.083 raw AND
+  resampled while the speech control passed. If mixed-sound/text
+  descriptions matter, add a CPU audio tagger (CLAP/PANNs/AST class)
+  whose labels feed enrichment as deterministic context (like EXIF).
+  Behind I6/I7/I9 in priority.
+- **EM-loop.** Standing embedding research-improvement program (Sebastian
+  2026-07-05): see `bench/ingest/embed-research-program.md` (frozen
+  harnesses H-A/H-B/H-C, knobs EM1–EM7, ship-gates). Interleave EM ticks
+  with I-goals when an embedding question is frontmost.
 - **I9 — Hybrid store e2e (PHASE GATE).** Qdrant LXC (or
   pgvector+tsvector — decide by ops preference), RRF fusion of BM25 +
   KNN. Frozen query set with known-correct targets → hit@k / MRR. This

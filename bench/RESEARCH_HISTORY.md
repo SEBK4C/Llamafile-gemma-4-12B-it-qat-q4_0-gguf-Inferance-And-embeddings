@@ -1043,3 +1043,46 @@ and deployed. Includes I1b (hardened fixture).
   ever needed).
 - **NEXT**: I6 chunker (enrichment-hint-guided, 256–1024 tok, doc-summary
   vector), then I7 /v1/ingest worker (chain_smoke → service).
+
+## I14 ✅ (2026-07-05) — real-data benchmarks (Sebastian's directive: public
+## sets instead of private photos) + embedding research loop program
+- **Directive**: use HF/Kaggle datasets for people[]/PDF/audio benchmarks +
+  write a research-improvement loop for embedding tests. (Kaggle CLI has no
+  token on this host — HF + direct GitHub sources used; add ~/.kaggle/
+  kaggle.json to enable Kaggle pulls.)
+- **Deliverables**: `fetch_datasets.py` (small public subsets →
+  `datasets_real/`, LOCAL-ONLY, licenses in sources.json: 14 Flickr30k-test
+  people photos w/ captions, 8 FUNSD scanned forms w/ word GT, 10
+  LibriSpeech test-clean utts, 12 ESC-50 clips), `real_eval.py` (4 evals +
+  phase-premise retrieval), **`embed-research-program.md`** (EM1–EM7
+  standing loop: frozen harnesses H-A synthetic / H-B Flickr-enrichment
+  retrieval / H-C BEIR NFCorpus [EM1 builds]; one knob per tick; ship-gate
+  ≥+0.02 on 2 harnesses no regression; ledger embed-research-results.tsv).
+- **Fetch traps (recorded for reuse)**: datasets 5.0 dropped script
+  datasets AND needs torchcodec for audio — bypass BOTH via the
+  datasets-server /rows HTTP API (works for parquet repos; fixie-ai
+  librispeech mirror for openslr); FUNSD zip has __MACOSX/._ AppleDouble
+  entries that sort FIRST and shadow real files.
+- **Results (bench/data/real_eval_20260705.json)**:
+  - **Flickr people (n=14): people[] detected 14/14, caption-overlap
+    14/14, PHASE-PREMISE retrieval hit@1 0.857 / MRR 0.917** — natural-
+    language caption → enrichment-text embedding finds the right real
+    photo. The mm-embedding.md dead end is officially detoured: text-
+    normalization DOES make photos retrievable in one text vector space.
+  - **FUNSD real scans (n=8): PP-OCRv6 word-F1 0.925** (unordered bag —
+    FUNSD GT has no canonical reading order) on degraded 1990s forms.
+  - **LibriSpeech (n=10): native Gemma-4 STT mean WER 0.030 / median
+    0.026** — I8's core question answered early: native audio path is a
+    STRONG ASR at 16 kHz; remaining I8 work is long-form segmentation only.
+  - **ESC-50 (n=12): 0.083** — every clip heard as "high-pitched
+    electronic beep" / "no audio".
+- **F22 (capability boundary, cleanly isolated)**: sounds score identical
+  RAW and after client-side 16k-mono resample, while a SPEECH file pushed
+  through the SAME resample path transcribes near-verbatim → not a
+  sample-rate bug: **the native audio encoder is SPEECH-ONLY**. Non-speech
+  description (mixed sounds → text) is architecturally out of scope for
+  the native path → new optional backlog **I15: sound-tagging sidecar**
+  (CLAP/PANNs/AST class, CPU) feeding enrichment as deterministic context.
+  real_eval keeps `to_16k_mono_wav` anyway (hygiene for arbitrary inputs).
+- **NEXT**: I6 chunker; EM1 (BEIR NFCorpus harness) whenever an embedding
+  tick is due; I15 optional sidecar behind I6/I7/I9.
