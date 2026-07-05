@@ -79,6 +79,29 @@ top_k {1, 64} × DRY {off, on} × 2 reps = 8 gens. Data: `data/topk_repro.csv`.
 4. Combined with E1: the loop needs **greedy decoding AND sufficient length
    (~1500 tokens)**; short generations mask it.
 
+### E3 — Temperature isolation @ max_tokens 1500, DRY off (SUCCESS — resolves the E1/E2 confound)
+temp {0.0, 0.3, 0.7, 1.0}, DRY off, top_k 64, max_tokens 1500, 2 reps.
+Data: `data/temp_isolate.csv`.
+
+| temperature | looped |
+|---|---|
+| 0.0 (greedy) | **2/2** |
+| 0.3 | 0/2 |
+| 0.7 | 0/2 |
+| 1.0 | 0/2 |
+
+**Decisive — the confound is resolved:**
+1. The loop is STRICTLY a greedy (temp 0) phenomenon. Any temperature ≥ 0.3
+   escapes it completely, even with DRY OFF. Sharp cliff (0 → 0.3).
+2. This explains E1's null result: E1 included temp 0, but at max_tokens 850 the
+   generation never reached the loop point (~10th list item). So **length gates
+   whether the loop MANIFESTS (~1500 tokens); temperature gates whether it OCCURS
+   AT ALL (only greedy)**.
+3. TWO independent fixes for the greedy loop: (a) any temp ≥ 0.3, or (b) DRY
+   (E2). The official Gemma recipe (temp 1.0) already avoids it; DRY is
+   belt-and-suspenders. **The one dangerous config is temp 0 — never serve greedy.**
+   (Exact threshold between 0 and 0.3 untested; practically irrelevant.)
+
 ---
 
 ## Proposed research goals (next iterations)
@@ -86,9 +109,9 @@ top_k {1, 64} × DRY {off, on} × 2 reps = 8 gens. Data: `data/topk_repro.csv`.
 - **G1 — Full frozen baseline.** Run the whole probe battery (acc/hum/soph/cal/
   rep/tok_s) at max_tokens ≥1500 to seed a trustworthy baseline row + confirm the
   decline rate at scale. (Pending; blocks the gate logic.)
-- **G2 — Isolate temp vs length.** Sweep temp {0, 0.3, 0.7, 1.0} at max_tokens
-  1500 (DRY off) to separate the temperature gate from the length gate. E1+E2
-  leave this confounded.
+- **G2 — Isolate temp vs length.** ✅ RESOLVED (E3): temperature gates loop
+  OCCURRENCE (only greedy/temp-0 loops; temp ≥ 0.3 never does); length gates
+  MANIFESTATION (~1500 tokens to reach the loop point).
 - **G3 — A/B the Constitution prompt** vs bare/no-prompt on the full battery
   (hum/soph/cal deltas) — does the distilled prompt measurably improve serving
   quality without loosening the decline gate?
