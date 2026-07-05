@@ -1206,3 +1206,35 @@ Program section: bench/phase3-ingest-program.md § P-SPRINT.
   extracted — "2026-06-30" fused from signed-date 2026-06-15 + "30 days".
   Entity-fidelity check (entities must be substrings or normalized forms
   of source text) goes into the VARIETY battery.
+
+## Q1 ✅ (2026-07-06) — deterministic fidelity gate shipped; 83.7% grounded
+- **Deliverable**: `bench/ingest/fidelity.py` (+ wired into both worker
+  routes; envelope gains `fidelity` block). Grounding rules: substring →
+  else STRICT value-match for dates (y,m,d tuples) and amounts/ids
+  (digit-strings) → else token-subset for pure names. Two traps closed in
+  design/selftest: (1) token-subset alone would PASS composed dates
+  ('2026','06','30' each occur separately in source) — value classes are
+  strict-by-value; (2) mixed entities ("Nebenstrasse 12") must ground the
+  NAME part too, else a shared number vouches for a fake street. Policy:
+  ungrounded entities DROPPED + flagged; prose numbers FLAG-only;
+  cross-field rules (chart_reading nulled on non-charts); pure-visual
+  docs (no source text) skip grounding by design.
+- **Seeded selftest (mini-Q3): 6/6 truths kept, 6/6 fakes caught** —
+  including T1's composed date and cross-format truths ("EUR 1800",
+  "15.06.2026"). Live rerun of the T1 lease text: "2026-06-30" caught,
+  dropped, flagged. The T1 escape is now structurally impossible for
+  date/amount/id classes.
+- **22-file real batch**: 139/166 entities grounded (**83.7%**) across 16
+  text-bearing docs; 6 visual docs skipped by design; flags:
+  ungrounded_entity 15, ungrounded_number 7, instruction_like_text 6
+  (FUNSD forms genuinely contain imperative text — F21-flag working).
+- **The honest nuance (drives Q2)**: FUNSD drops are a MIX — true
+  F20-class hallucinations (document-control numbers with digit errors:
+  '82253337' vs source '82250337') AND vision-read-but-OCR-missed values
+  (model legitimately reads dates that 0.925-F1 OCR didn't transcribe;
+  grounding is against OCR text). The gate's own precision/recall is
+  unmeasurable without labels → **Q2 (SROIE labeled receipts) quantifies
+  gate false-drop rate** and decides the Q5 policy for scanned docs
+  (drop vs flag when OCR coverage is imperfect).
+- **NEXT**: Q2 (SROIE + ChartQA labeled rates), then EM1 BEIR harness;
+  100-file variety batch.

@@ -29,6 +29,7 @@ from router import route                     # noqa: E402
 from ocr import make_engine, extract         # noqa: E402
 from enrich import enrich, semantic_valid    # noqa: E402
 from real_eval import chat_audio, to_16k_mono_wav  # noqa: E402
+from fidelity import apply_fidelity          # noqa: E402
 import chunker as chk                        # noqa: E402
 
 LOCK = os.path.join(HERE, "..", ".eval.lock")
@@ -115,6 +116,7 @@ def ingest_one(path, base, embed_base, stages, keep_vectors=False):
         stages.add("enrich", time.time() - t0)
     e = er["enrichment"]
     ok = er["parse_error"] is None and semantic_valid(e)
+    fid = apply_fidelity(e, full_text) if ok else None  # Q1 gate (mutates e)
 
     t0 = time.time()
     chk._TOK_BASE = embed_base
@@ -133,6 +135,7 @@ def ingest_one(path, base, embed_base, stages, keep_vectors=False):
            "file": r["file"], "source_type": r["source_type"],
            "pages": r["pages"], "text_chars": len(full_text),
            "transcript": transcript, "enrichment": e, "enrich_ok": ok,
+           "fidelity": fid,
            "chunks": [dict(c, embedding=(vecs[1+i] if keep_vectors else None),
                             embedding_dims=len(vecs[1+i]))
                       for i, c in enumerate(chunks)],
@@ -164,6 +167,7 @@ def ingest_text(text, base, embed_base, stages=None, name="api_text",
         stages.add("enrich", time.time() - t0)
     e = er["enrichment"]
     ok = er["parse_error"] is None and semantic_valid(e)
+    fid = apply_fidelity(e, text) if ok else None  # Q1 gate (mutates e)
 
     t0 = time.time()
     chk._TOK_BASE = embed_base
@@ -181,7 +185,7 @@ def ingest_text(text, base, embed_base, stages=None, name="api_text",
                      "mtime": None, "exif": None},
            "source_type": "text_api", "pages": None,
            "text_chars": len(text), "transcript": None,
-           "enrichment": e, "enrich_ok": ok,
+           "enrichment": e, "enrich_ok": ok, "fidelity": fid,
            "chunks": [dict(c, embedding=(vecs[1+i] if keep_vectors else None),
                             embedding_dims=len(vecs[1+i]))
                       for i, c in enumerate(chunks)],
