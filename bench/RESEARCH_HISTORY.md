@@ -301,12 +301,42 @@ SSE); vision 1.39s; audio-in 2.78s; TTS 0.68×RT. Data:
 `data/api_probe_20260705-133610.{json,tsv}`; chart:
 `data/api_probe_20260705.png` (generator: `bench/chart_api_probe.py`).
 
+### F10 — Harness-lab LXC bring-up traps (iteration 7)
+Creating CT 130 "harness-lab" (debian-13, hookscript auto-enroll) re-confirmed
+two traps worth documenting:
+1. **First start always fails enrollment**: the hookscript writes TUN config at
+   pre-start but `/dev/net/tun` only exists after a RESTART, and the minimal
+   debian-13 template has no `curl` for the tailscale installer. Working
+   sequence: create → set hookscript → start (enrollment fails) → `apt install
+   curl` → restart → clean enroll (1Password key path live).
+2. **Claude Code needs Node ≥ 22**: on Debian 13's stock Node 20.19,
+   `npm i -g @anthropic-ai/claude-code` EBADENGINE-warns and SILENTLY installs
+   no `claude` binary. NodeSource Node 22 fixes it.
+
+### E8 — Claude Code drives Gemma-4 12B through /v1/messages (SUCCESS ×3; iteration 7)
+CT 130 → tailnet → prod server. Claude Code 2.1.201, headless `-p`,
+`--max-turns 12`; env = ANTHROPIC_BASE_URL + dummy key + all five model
+overrides; IS_SANDBOX=1 for --dangerously-skip-permissions as root.
+
+| test | what | verdict |
+|---|---|---|
+| E8a | raw Anthropic tool round-trip (curl) | **PASS** — `tool_use {"city":"Paris"}`, stop_reason=tool_use; tool_result → "22°C and sunny, wind 8 km/h" |
+| E8b | `claude -p` create hello.py + run it | **PASS** — 3 turns, 9.6 s; artifact independently verified |
+| E8c | `claude -p` fib.py + test_fib.py to green | **PASS** — 4 turns, 12.5 s; ALL TESTS PASSED reproduced; fib(20)=6765 |
+
+**Implication:** the full agentic loop (system prompt ~10k tok → thinking →
+tool_use → tool_result → repeat → report) works on a 12B QAT model at
+interactive speed. H2(Claude Code) ✅ → the gated integration doc SHIPPED:
+`docs/integrations/claude-code.md` (env-var setup, verified matrix, caveats).
+Honest scope note: these are SMALL tasks; long-context refactors remain out of
+scope for a 12B — the doc's warning stays. Data:
+`data/harness_e2e_20260705.json`; chart: `data/harness_e2e_20260705.png`.
+
 ## Goals (phase 2)
 - **H1 ✅ (E7)** Endpoint inventory + published one-command probe suite.
-- **H2 — Harness e2e in LXC.** Fresh LXC + Claude Code CLI → ANTHROPIC_BASE_URL
-  at this server (scripted non-interactive task; measure task completion +
-  tool-call fidelity). Then OpenCode, Cline/Kilo (OpenAI-compat), OpenClaw. One
-  harness per iteration; each integration doc ships only after its e2e passes.
+- **H2 — Harness e2e in LXC.** ✅ **Claude Code (E8, iteration 7)** — remaining:
+  OpenCode, Cline/Kilo (OpenAI-compat), OpenClaw; one per iteration, reusing
+  CT 130. Each integration doc ships only after its e2e passes.
 - **H3 — Embeddings that work.** Pooling flags vs dedicated
   EmbeddingGemma/nomic GGUF sidecar; benchmark vs F9 triplet + small STS set.
 - **H4 — Integration docs** (`docs/integrations/*.md`) adapted from

@@ -1,0 +1,26 @@
+{
+ "suite": "harness_e2e",
+ "date": "2026-07-05",
+ "server": "gemma4-server.llamafile v0.5.0 (prod CT118 ExecStart), RTX 3080 Ti, 128K ctx f16 KV",
+ "model": "gemma-4-12b-it-qat-q4_0.gguf",
+ "client_env": "LXC 130 'harness-lab': Debian 13, Node 22.23.1, tailnet path to server",
+ "results": [
+  {"id": "E8a", "harness": "raw curl", "surface": "/v1/messages tools",
+   "task": "get_weather tool round-trip (tool_use emit + tool_result consume)",
+   "verdict": "PASS", "wall_s": 1.9, "turns": 2,
+   "detail": "tool_use name/args exact; stop_reason=tool_use; final answer integrates 22C sunny 8km/h"},
+  {"id": "E8b", "harness": "Claude Code 2.1.201", "surface": "/v1/messages (SSE, tools, count_tokens)",
+   "task": "create hello.py printing exact string, run to verify",
+   "verdict": "PASS", "wall_s": 9.6, "turns": 3,
+   "detail": "subtype=success; artifact independently verified: python3 hello.py -> 'Hello from Gemma'"},
+  {"id": "E8c", "harness": "Claude Code 2.1.201", "surface": "/v1/messages (SSE, tools, count_tokens)",
+   "task": "fib.py + test_fib.py (assert n=0..10), run tests to green",
+   "verdict": "PASS", "wall_s": 12.5, "turns": 4,
+   "detail": "ALL TESTS PASSED independently reproduced; spot-check fib(10)=55, fib(20)=6765"}
+ ],
+ "traps": [
+  "LXC first start: TUN device appears only after restart; minimal debian-13 template lacks curl for hookscript",
+  "@anthropic-ai/claude-code EBADENGINE on Node 20.19 -> silent broken install (no bin); Node 22 required",
+  "run as root needs IS_SANDBOX=1 for --dangerously-skip-permissions"
+ ]
+}
