@@ -1351,3 +1351,28 @@ loop). VARIETY/EM/Q backlog resumes post-release.
   File/OCR ingest stays external until I12.
 - **STILL GATED**: full-CUDA e2e (needs Sebastian's ~4-min prod-pause go)
   → then README + GitHub/HF v0.6.0 publish, per his own sequencing.
+
+## V6 tick 3 ✅ (2026-07-06) — release staged: README, notes, probe tests;
+## F25 supervisor-leak found by the probe and fixed for embed
+- **Staged for publish** (commit 5133f81): README "What's new in v0.6.0"
+  (baked embeddings + /v1/ingest + the quality numbers behind them, with
+  the honest scope lines) + curl examples; `release-notes-v0.6.0.md`
+  (DRAFT, carries known-issues incl. the voice leak below); api_probe
+  grew `embed_baked` + `ingest` tests — **staged binary: 17 PASS /
+  1 expected-FAIL (main-model anisotropy, documented) / 1 SKIP**. First
+  probe run misread the helper's return shape (checked `status`/`body`,
+  helper returns `code`/`raw`) — fixed; the metric-first lesson again.
+- **F25 (found because the probe failed): SIGKILL leaks supervisors.**
+  atexit-based cleanup never runs on kill -9 — stacked orphans observed
+  (3× embed loops, 4× voice listeners) from earlier hard-killed test
+  runs, and each new launch then crash-loops on the taken port. Fix in
+  embed.c: the supervisor loop is tied to the PARENT'S liveness (checks
+  `kill -0 $PPID` every 2 s, tears down the in-flight sidecar and exits).
+  **Validated end-to-end: kill -9 of the main server → embed supervisor
+  and sidecar gone within 6 s.** voice.c has the same leak — queued for
+  tick 4 (watchdog script needs the same parent guard), documented as a
+  known issue in the release notes.
+- **WAITING ON SEBASTIAN**: the ~4-min prod pause for full-CUDA e2e.
+  When given: stop gemma.service → GPU battery (chat tok/s + probe +
+  /embed + /v1/ingest on GPU) → restart → verify → tag v0.6.0 → GitHub
+  release + HF binary upload + README sync. Everything else is done.
