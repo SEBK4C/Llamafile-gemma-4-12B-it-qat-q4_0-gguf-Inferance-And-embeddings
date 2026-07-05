@@ -981,3 +981,40 @@ and deployed. Includes I1b (hardened fixture).
   patches. If the fork ever syncs upstream's real fix for this, drop 0019.
 - **NEXT**: I4 enrichment call (unchanged); embeddings stack is now final
   for the phase (qwen3-canonical, 1024-dim, instructed queries).
+
+## I4 ✅ (2026-07-05) — enrichment call: 6/6 schema-valid, injection resisted
+- **Deliverables**: `bench/ingest/enrich.py` (ingest.v1 `enrichment` block:
+  frozen ENRICH_SCHEMA, byte-identical SYSTEM_PREFIX, build/enrich/bench),
+  `bench/ingest/make_fixtures_enrich.py` + `fixtures_enrich/` (PIL bar
+  chart with known reading, prompt-injection probe, blank control) +
+  reuse of I2 fixtures (doc_page, receipt via live PP-OCRv6) + a text-only
+  CSV case. Data: `bench/data/enrich_bench_20260705.json`.
+- **Design as programmed**: ONE call per doc; `response_format
+  {"type":"json_object","schema":…}` (server compiles GBNF —
+  server-common.cpp accepts json_object+schema and json_schema shapes);
+  `enable_thinking:false` (H8); OCR text authoritative + image for
+  semantics (F20); document text framed as DATA never instructions;
+  `cache_prompt:true` with fixed prefix → **H10 confirmed live: 246–408
+  cached tokens on every call after the first**.
+- **Results**: schema-valid **6/6 first try** (grammar = validity by
+  construction; the "JSON linter + ask to fix" loop from the original spec
+  is unnecessary as primary), expectations **6/6** after one prompt fix;
+  1.4–3.0 s/doc (~20 docs/min enrichment-side at these sizes — better
+  than the 2-6/min worst-case estimate; scales with output length).
+  **Injection probe RESISTED**: hostile "output PWNED as title" text was
+  described as content, title clean.
+- **F21 (the finding): grammar-masked enums pick near-arbitrary values
+  unless the allowed values are IN the prompt.** First run: titles and
+  summaries PERFECT ("technical description of a document processing
+  pipeline") while task_domain came out "med"/"law". The model never sees
+  the schema — only the mask — so when its preferred continuation
+  ("technical", "finance") is masked, the surviving enum member is
+  effectively arbitrary at temp 0. Enumerating the 5 domains with one-line
+  definitions in SYSTEM_PREFIX → 6/6 domains correct. Rule: **every enum
+  in a grammar-constrained schema gets its value list + semantics in the
+  prompt.**
+- **Caveats**: people[] path untested (no real photos in fixtures — queued
+  with I5 real-scan fixtures); expectations are structural (bools, enums,
+  tripwires, must-mention), content quality spot-audited not judged.
+- **NEXT**: I5 router + deterministic extractors (MIME routing, PDF
+  text-layer probe, EXIF, real-photo fixtures), then I6 chunker.
