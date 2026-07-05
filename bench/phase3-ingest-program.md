@@ -183,9 +183,22 @@ the query router applies at search time.
   precedent), mutool for PDF raster (AGPL — note in docs). Documented
   failure is an acceptable outcome; the sidecar remains the shipped path.
 
-Order: I1→I2→(I3,I4)→I5→I6→I7→I8→I9→I10→I11→I12. I3 gates I4's design;
-I9 gates calling the phase done; I11/I12 are the "next llamafile build"
-deliverables.
+- **I13 — Fix pooling-last, promote Qwen3-Embedding (SEBASTIAN'S CALL
+  2026-07-05, run BEFORE I4).** He prefers Qwen3-Embedding-0.6B (stronger
+  MTEB when run canonically, Apache-2.0 vs Gemma ToU). Blocker is F16: the
+  fork's ggml asserts in `get_rows` at graph reserve with `--pooling last`
+  (Qwen3's required readout). Patch the vendored llama.cpp/ggml (upstream
+  has the reserve-batch/pooling fix; targeted backport is acceptable),
+  rebuild, verify the NEW binary as a SEPARATE file for the sidecar (do
+  NOT touch prod main-server binary), then re-run `embed_ab.py` with
+  qwen3 CANONICAL (last pooling + query-side instructions) vs
+  embeddinggemma on the I1b hardened fixture. Winner ships to
+  embed.service; egemma stays the fallback. Payload `embedding_model` +
+  `pipeline_version` make the re-embed migration clean.
+
+Order: I1→I2→I3→**I13**→I4→I5→I6→I7→I8→I9→I10→I11→I12 (+I1b folded into
+I13's re-A/B). I3 gates I4's design; I9 gates calling the phase done;
+I11/I12 are the "next llamafile build" deliverables.
 
 ## Guardrails
 
