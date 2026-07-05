@@ -235,9 +235,46 @@ enrich 3468 ms · chunk 15 ms · embed 1183 ms = **6.6 s/doc ≈ 9 docs/min**.
   refresh under real ingest load); GPU-yield policy validated.
 - **Exit gate ("solid")**: two consecutive P-ticks improve pipeline
   docs/min by <5% → freeze the config, record it, move to VARIETY.
+  *(MET 2026-07-06: P2+P3. Frozen: worker C=2 · v1+DRY · medium@8thr ·
+  qwen3-last c4096 → 17.58 docs/min.)*
 - **VARIETY (after gate)**: dataset-variety e2e — full real_eval suite +
   EM1 BEIR harness + larger Flickr/FUNSD/LibriSpeech samples + mixed
   100-file batch through the worker; failures become fixtures.
+
+## Q-GOALS (Sebastian 2026-07-06): enrichment-QA research loop (inside VARIETY)
+
+Trigger: T1's composed entity ("2026-06-30" = signed-date + 30-day term).
+Principle: per-doc guarantees for MECHANICAL fidelity, statistical bounds
+for SEMANTIC fidelity, confidence flags for the rest. Wrong enrichment
+degrades ranking, never truth (source text is always stored) — the bar is
+"measured and bounded", not "zero hallucination" (does not exist).
+
+- **Q1 — deterministic fidelity gate (Tier 0, always-on).** Every entity/
+  number/date in enrichment must be a substring OR normalized form of the
+  source (case/space/date/amount normalizers, no deps). Violations →
+  dropped from entities + `quality_flags:["ungrounded_entity"]` + envelope
+  `fidelity: {entities_grounded: x/y, numbers_grounded: x/y}`. Cross-field
+  rules the grammar can't express: is_chart=false ⇒ chart_reading null;
+  has_text=false ⇒ entities ⊆ visual names. Measure violation rate on the
+  22-file batch + text route.
+- **Q2 — labeled hallucination rates (Tier 2).** SROIE receipts (labeled
+  total/date/company → entity precision AND recall/omissions), ChartQA
+  subset (chart_reading number accuracy), DocVQA sample (QA faithfulness).
+  Publishes per-field error rates with n.
+- **Q3 — seeded-fault calibration (the key trick).** Inject known-false
+  entities/numbers/relations into envelopes; measure EACH checker's
+  catch-rate (Q1 gate, verification pass, consistency sampling). A checker
+  without a measured catch-rate is decoration.
+- **Q4 — self-verification + consistency sampling A/B (Tier 1).** Does a
+  per-claim verify call (or temp>0 ×2 flip-rate) reduce the residual error
+  at acceptable GPU cost? Judged against Q2 labels + Q3 seeds; keep only
+  if catch-rate/cost beats the deterministic gate meaningfully. Known
+  blind spot to test explicitly: verifier sharing generator priors
+  (F20-style self-consistent errors).
+- **Q5 — ship policy.** Frozen thresholds: which violations drop fields,
+  which only flag, which quarantine the doc for re-enrichment. Exit =
+  per-field rates + checker catch-rates published; QA moves from research
+  to monitoring.
 
 Order: I1→I2→I3→**I13**→I4→I5→I6→**P1…Pn(+EM ticks)**→VARIETY→I7(service
 wrap)→I8-tail→I9→I10→I11→I12. I9 still gates the phase; I11/I12 remain
