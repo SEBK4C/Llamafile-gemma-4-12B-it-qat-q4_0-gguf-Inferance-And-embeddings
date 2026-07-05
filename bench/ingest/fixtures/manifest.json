@@ -1,0 +1,39 @@
+{
+ "clean_line.png": [
+  "The quick brown fox jumps over 13 lazy dogs on 2026-07-05."
+ ],
+ "doc_page.png": [
+  "Phase 3 converts every file in the archive into enriched text before",
+  "embedding. Scanned pages pass through PP-OCRv6 detection and",
+  "recognition, while digital PDFs keep their native text layer intact.",
+  "The Gemma 4 model then answers one structured question battery per",
+  "document: does the image contain text, is it a chart, who is present,",
+  "and where are the logical chunk boundaries for retrieval?",
+  "Each chunk of 256 to 1024 tokens receives its own vector from the",
+  "embeddinggemma-300m sidecar running on CPU port 8081. The document",
+  "summary gets one additional vector for hierarchical search. Hybrid",
+  "retrieval fuses BM25 over the enrichment JSON with dense cosine",
+  "similarity, using reciprocal rank fusion at query time.",
+  "Throughput is bounded by the enrichment call, not the OCR stage.",
+  "The server ceiling near 200 tokens per second implies roughly two to",
+  "six documents per minute during bulk backfill of the family archive."
+ ],
+ "receipt.png": [
+  "PVE HOMELAB SUPPLY",
+  "2026-07-05  14:32",
+  "----------------------",
+  "USB 10G NIC     89.00",
+  "NVMe 2TB       119.90",
+  "Cat6a 10m        8.45",
+  "----------------------",
+  "TOTAL  EUR     217.35",
+  "VAT 19%         34.71",
+  "Card **** 4821"
+ ],
+ "rotated15.png": [
+  "The quick brown fox jumps over 13 lazy dogs on 2026-07-05."
+ ],
+ "low_contrast.png": [
+  "The quick brown fox jumps over 13 lazy dogs on 2026-07-05."
+ ]
+}

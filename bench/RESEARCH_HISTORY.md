@@ -862,3 +862,36 @@ dedicated text embedder, enrichment JSON doubles as the BM25 corpus.
 - **NEXT**: I2 (PP-OCRv6 det+rec ONNX extractor + CER/pages-sec bench);
   then I3 vision-legibility V-probe (gates enrichment design); I1b harder
   fixture; I13 fork ggml sync for pooling-last.
+
+## I2 ✅ (2026-07-05) — PP-OCRv6 ONNX extractor: CER 0.0000, 0.55 pages/s CPU
+- **Setup**: `PaddlePaddle/PP-OCRv6_medium_det_onnx` + `_rec_onnx` (June 2026
+  release) wired into `rapidocr_onnxruntime` via custom model paths. The rec
+  char dict (18708 chars, 50 langs) is NOT shipped as a txt — extracted it
+  from the rec `inference.yml` `PostProcess.character_dict`; verified
+  18708 + blank + space = 18710 = the ONNX head's class dim, exactly
+  rapidocr's CTC decode convention. Det params from the yml (thresh 0.2,
+  box_thresh 0.45, unclip 1.4). Env: host-side uv venv `ocrenv`
+  (rapidocr_onnxruntime + pillow + pyyaml), CPU only.
+- **Deliverables**: `bench/ingest/ocr.py` (extractor + `--bench` CER/speed
+  mode; env-overridable model paths), `bench/ingest/make_fixtures.py` +
+  `bench/ingest/fixtures/` (5 deterministic golden fixtures: clean line,
+  A4@200dpi doc page, monospace receipt, 15° rotation, low contrast; PIL
+  renders with DejaVu, GT in manifest.json).
+- **F18 (reading order)**: raw detector output order scrambles multi-column
+  rows — the receipt came back "USB / 10G NIC / 89.00" as 3 separate boxes
+  → naive join scored CER 0.2614 despite ZERO character errors. Fix shipped
+  in ocr.py `group_lines()`: cluster boxes by y-center overlap (0.6×h),
+  sort members by x, join → the text downstream chunking/embedding sees is
+  true reading order. Also: decorative dash rulers are (correctly) not
+  detected — CER reference now excludes non-alphanumeric GT lines.
+- **Results (after fix)**: **CER 0.0000 on ALL 5 fixtures** incl. rotated
+  and low-contrast; doc_page median 1820 ms → **0.55 pages/s** (~33
+  pages/min) single-image CPU on the PVE host. OCR is NOT the pipeline
+  bottleneck (enrichment ~2-6 docs/min per H7 ceiling). Headroom if ever
+  needed: small/tiny det+rec tiers, OpenVINO EP (paper: 5.2× CPU), batch.
+- **Caveats**: fixtures are RENDERED text (clean fonts) — real scans/photos
+  land in I3/I5 fixtures; receipt CER counts content only (separators
+  excluded by design); first-call includes ~500ms session warmup, bench
+  uses median of 3.
+- **NEXT**: I3 vision-legibility V-probe (Gemma reads doc_page.png vs this
+  OCR ground truth — gates enrichment design), then I4 enrichment schema.

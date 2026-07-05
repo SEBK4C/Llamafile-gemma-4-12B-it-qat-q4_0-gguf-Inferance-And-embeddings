@@ -1,0 +1,902 @@
+{
+ "mean_cer": 0.0,
+ "doc_page_ms_median": 1820.5,
+ "pages_per_sec": 0.549,
+ "reps_ms": [
+  1815.4,
+  1820.5,
+  1881.6
+ ],
+ "fixtures": {
+  "clean_line.png": {
+   "cer": 0.0,
+   "gt_chars": 58,
+   "file": "clean_line.png",
+   "ms": 1334.2,
+   "n_boxes": 1,
+   "text": "The quick brown fox jumps over 13 lazy dogs on 2026-07-05.",
+   "lines": [
+    "The quick brown fox jumps over 13 lazy dogs on 2026-07-05."
+   ],
+   "raw_lines": [
+    "The quick brown fox jumps over 13 lazy dogs on 2026-07-05."
+   ],
+   "boxes": [
+    [
+     [
+      14.0,
+      20.0
+     ],
+     [
+      1128.0,
+      17.0
+     ],
+     [
+      1128.0,
+      68.0
+     ],
+     [
+      14.0,
+      70.0
+     ]
+    ]
+   ],
+   "scores": [
+    0.999
+   ]
+  },
+  "doc_page.png": {
+   "cer": 0.0,
+   "gt_chars": 916,
+   "file": "doc_page.png",
+   "ms": 2960.3,
+   "n_boxes": 14,
+   "text": "Phase 3 converts every file in the archive into enriched text before\nembedding. Scanned pages pass through PP-OCRv6 detection and\nrecognition, while digital PDFs keep their native text layer intact.\nThe Gemma 4 model then answers one structured question battery per\ndocument: does the image contain text, is it a chart, who is present,\nand where are the logical chunk boundaries for retrieval?\nEach chunk of 256 to 1024 tokens receives its own vector from the\nembeddinggemma-300m sidecar running on CPU port 8081. The document\nsummary gets one additional vector for hierarchical search. Hybrid\nretrieval fuses BM25 over the enrichment JSON with dense cosine\nsimilarity, using reciprocal rank fusion at query time.\nThroughput is bounded by the enrichment call, not the OCR stage.\nThe server ceiling near 200 tokens per second implies roughly two to\nsix documents per minute during bulk backfill of the family archive.",
+   "lines": [
+    "Phase 3 converts every file in the archive into enriched text before",
+    "embedding. Scanned pages pass through PP-OCRv6 detection and",
+    "recognition, while digital PDFs keep their native text layer intact.",
+    "The Gemma 4 model then answers one structured question battery per",
+    "document: does the image contain text, is it a chart, who is present,",
+    "and where are the logical chunk boundaries for retrieval?",
+    "Each chunk of 256 to 1024 tokens receives its own vector from the",
+    "embeddinggemma-300m sidecar running on CPU port 8081. The document",
+    "summary gets one additional vector for hierarchical search. Hybrid",
+    "retrieval fuses BM25 over the enrichment JSON with dense cosine",
+    "similarity, using reciprocal rank fusion at query time.",
+    "Throughput is bounded by the enrichment call, not the OCR stage.",
+    "The server ceiling near 200 tokens per second implies roughly two to",
+    "six documents per minute during bulk backfill of the family archive."
+   ],
+   "raw_lines": [
+    "Phase 3 converts every file in the archive into enriched text before",
+    "embedding. Scanned pages pass through PP-OCRv6 detection and",
+    "recognition, while digital PDFs keep their native text layer intact.",
+    "The Gemma 4 model then answers one structured question battery per",
+    "document: does the image contain text, is it a chart, who is present,",
+    "and where are the logical chunk boundaries for retrieval?",
+    "Each chunk of 256 to 1024 tokens receives its own vector from the",
+    "embeddinggemma-300m sidecar running on CPU port 8081. The document",
+    "summary gets one additional vector for hierarchical search. Hybrid",
+    "retrieval fuses BM25 over the enrichment JSON with dense cosine",
+    "similarity, using reciprocal rank fusion at query time.",
+    "Throughput is bounded by the enrichment call, not the OCR stage.",
+    "The server ceiling near 200 tokens per second implies roughly two to",
+    "six documents per minute during bulk backfill of the family archive."
+   ],
+   "boxes": [
+    [
+     [
+      117.5,
+      117.9
+     ],
+     [
+      1464.9,
+      117.9
+     ],
+     [
+      1464.9,
+      167.4
+     ],
+     [
+      117.5,
+      167.4
+     ]
+    ],
+    [
+     [
+      116.3,
+      181.6
+     ],
+     [
+      1457.8,
+      181.6
+     ],
+     [
+      1457.8,
+      232.2
+     ],
+     [
+      116.3,
+      232.2
+     ]
+    ],
+    [
+     [
+      116.3,
+      244.0
+     ],
+     [
+      1423.8,
+      244.0
+     ],
+     [
+      1423.8,
+      293.6
+     ],
+     [
+      116.3,
+      293.6
+     ]
+    ],
+    [
+     [
+      112.8,
+      304.2
+     ],
+     [
+      1557.7,
+      306.5
+     ],
+     [
+      1557.7,
+      356.0
+     ],
+     [
+      112.8,
+      353.7
+     ]
+    ],
+    [
+     [
+      116.3,
+      367.8
+     ],
+     [
+      1494.2,
+      367.8
+     ],
+     [
+      1494.2,
+      417.3
+     ],
+     [
+      116.3,
+      417.3
+     ]
+    ],
+    [
+     [
+      115.1,
+      429.1
+     ],
+     [
+      1269.9,
+      428.0
+     ],
+     [
+      1269.9,
+      475.1
+     ],
+     [
+      115.1,
+      476.3
+     ]
+    ],
+    [
+     [
+      116.3,
+      552.9
+     ],
+     [
+      1467.2,
+      552.9
+     ],
+     [
+      1467.2,
+      598.9
+     ],
+     [
+      116.3,
+      598.9
+     ]
+    ],
+    [
+     [
+      116.3,
+      614.2
+     ],
+     [
+      1637.6,
+      614.2
+     ],
+     [
+      1637.6,
+      663.7
+     ],
+     [
+      116.3,
+      663.7
+     ]
+    ],
+    [
+     [
+      112.8,
+      677.9
+     ],
+     [
+      1466.0,
+      676.7
+     ],
+     [
+      1466.0,
+      726.2
+     ],
+     [
+      112.8,
+      727.4
+     ]
+    ],
+    [
+     [
+      116.3,
+      740.4
+     ],
+     [
+      1441.4,
+      740.4
+     ],
+     [
+      1441.4,
+      786.3
+     ],
+     [
+      116.3,
+      786.3
+     ]
+    ],
+    [
+     [
+      115.1,
+      801.7
+     ],
+     [
+      1182.9,
+      801.7
+     ],
+     [
+      1182.9,
+      851.2
+     ],
+     [
+      115.1,
+      851.2
+     ]
+    ],
+    [
+     [
+      113.9,
+      925.5
+     ],
+     [
+      1457.8,
+      925.5
+     ],
+     [
+      1457.8,
+      975.0
+     ],
+     [
+      113.9,
+      975.0
+     ]
+    ],
+    [
+     [
+      113.9,
+      985.6
+     ],
+     [
+      1510.7,
+      986.8
+     ],
+     [
+      1510.7,
+      1037.5
+     ],
+     [
+      113.9,
+      1036.3
+     ]
+    ],
+    [
+     [
+      115.1,
+      1049.2
+     ],
+     [
+      1479.0,
+      1049.2
+     ],
+     [
+      1479.0,
+      1098.8
+     ],
+     [
+      115.1,
+      1098.8
+     ]
+    ]
+   ],
+   "scores": [
+    0.9999,
+    0.9979,
+    0.9978,
+    0.9996,
+    0.9915,
+    0.9998,
+    1.0,
+    0.9999,
+    0.9952,
+    0.9997,
+    0.9999,
+    0.9996,
+    0.9993,
+    0.9935
+   ]
+  },
+  "receipt.png": {
+   "cer": 0.0,
+   "gt_chars": 130,
+   "file": "receipt.png",
+   "ms": 614.7,
+   "n_boxes": 22,
+   "text": "PVE HOMELAB SUPPLY\n2026-07-05 14:32\nUSB 10G NIC 89.00\nNVMe 2TB 119.90\nCat6a 10m 8.45\nTOTAL EUR 217.35\nVAT 19% 34.71\nCard **** 4821",
+   "lines": [
+    "PVE HOMELAB SUPPLY",
+    "2026-07-05 14:32",
+    "USB 10G NIC 89.00",
+    "NVMe 2TB 119.90",
+    "Cat6a 10m 8.45",
+    "TOTAL EUR 217.35",
+    "VAT 19% 34.71",
+    "Card **** 4821"
+   ],
+   "raw_lines": [
+    "PVE HOMELAB",
+    "SUPPLY",
+    "2026-07-05",
+    "14:32",
+    "USB",
+    "10G NIC",
+    "89.00",
+    "NVMe",
+    "2TB",
+    "119.90",
+    "Cat6a",
+    "10m",
+    "8.45",
+    "TOTAL",
+    "EUR",
+    "217.35",
+    "VAT",
+    "19%",
+    "34.71",
+    "Card",
+    "****",
+    "4821"
+   ],
+   "boxes": [
+    [
+     [
+      27.0,
+      28.0
+     ],
+     [
+      195.0,
+      28.0
+     ],
+     [
+      195.0,
+      58.0
+     ],
+     [
+      27.0,
+      58.0
+     ]
+    ],
+    [
+     [
+      198.0,
+      29.0
+     ],
+     [
+      294.0,
+      29.0
+     ],
+     [
+      294.0,
+      57.0
+     ],
+     [
+      198.0,
+      57.0
+     ]
+    ],
+    [
+     [
+      27.0,
+      66.0
+     ],
+     [
+      177.0,
+      66.0
+     ],
+     [
+      177.0,
+      94.0
+     ],
+     [
+      27.0,
+      94.0
+     ]
+    ],
+    [
+     [
+      199.0,
+      65.0
+     ],
+     [
+      279.0,
+      65.0
+     ],
+     [
+      279.0,
+      95.0
+     ],
+     [
+      199.0,
+      95.0
+     ]
+    ],
+    [
+     [
+      27.0,
+      140.0
+     ],
+     [
+      78.0,
+      140.0
+     ],
+     [
+      78.0,
+      168.0
+     ],
+     [
+      27.0,
+      168.0
+     ]
+    ],
+    [
+     [
+      83.0,
+      138.0
+     ],
+     [
+      194.0,
+      139.0
+     ],
+     [
+      193.0,
+      170.0
+     ],
+     [
+      83.0,
+      168.0
+     ]
+    ],
+    [
+     [
+      257.0,
+      139.0
+     ],
+     [
+      337.0,
+      139.0
+     ],
+     [
+      337.0,
+      170.0
+     ],
+     [
+      257.0,
+      170.0
+     ]
+    ],
+    [
+     [
+      27.0,
+      178.0
+     ],
+     [
+      92.0,
+      178.0
+     ],
+     [
+      92.0,
+      206.0
+     ],
+     [
+      27.0,
+      206.0
+     ]
+    ],
+    [
+     [
+      97.0,
+      178.0
+     ],
+     [
+      148.0,
+      178.0
+     ],
+     [
+      148.0,
+      205.0
+     ],
+     [
+      97.0,
+      205.0
+     ]
+    ],
+    [
+     [
+      245.0,
+      176.0
+     ],
+     [
+      336.0,
+      177.0
+     ],
+     [
+      336.0,
+      206.0
+     ],
+     [
+      244.0,
+      205.0
+     ]
+    ],
+    [
+     [
+      27.0,
+      214.0
+     ],
+     [
+      108.0,
+      214.0
+     ],
+     [
+      108.0,
+      243.0
+     ],
+     [
+      27.0,
+      243.0
+     ]
+    ],
+    [
+     [
+      113.0,
+      216.0
+     ],
+     [
+      163.0,
+      216.0
+     ],
+     [
+      163.0,
+      242.0
+     ],
+     [
+      113.0,
+      242.0
+     ]
+    ],
+    [
+     [
+      272.0,
+      213.0
+     ],
+     [
+      337.0,
+      213.0
+     ],
+     [
+      337.0,
+      243.0
+     ],
+     [
+      272.0,
+      243.0
+     ]
+    ],
+    [
+     [
+      26.0,
+      287.0
+     ],
+     [
+      107.0,
+      287.0
+     ],
+     [
+      107.0,
+      317.0
+     ],
+     [
+      26.0,
+      317.0
+     ]
+    ],
+    [
+     [
+      128.0,
+      287.0
+     ],
+     [
+      178.0,
+      288.0
+     ],
+     [
+      178.0,
+      318.0
+     ],
+     [
+      127.0,
+      316.0
+     ]
+    ],
+    [
+     [
+      243.0,
+      286.0
+     ],
+     [
+      337.0,
+      287.0
+     ],
+     [
+      336.0,
+      318.0
+     ],
+     [
+      242.0,
+      317.0
+     ]
+    ],
+    [
+     [
+      28.0,
+      325.0
+     ],
+     [
+      78.0,
+      325.0
+     ],
+     [
+      78.0,
+      354.0
+     ],
+     [
+      28.0,
+      354.0
+     ]
+    ],
+    [
+     [
+      85.0,
+      325.0
+     ],
+     [
+      136.0,
+      325.0
+     ],
+     [
+      136.0,
+      354.0
+     ],
+     [
+      85.0,
+      354.0
+     ]
+    ],
+    [
+     [
+      257.0,
+      324.0
+     ],
+     [
+      337.0,
+      324.0
+     ],
+     [
+      337.0,
+      355.0
+     ],
+     [
+      257.0,
+      355.0
+     ]
+    ],
+    [
+     [
+      27.0,
+      362.0
+     ],
+     [
+      92.0,
+      362.0
+     ],
+     [
+      92.0,
+      392.0
+     ],
+     [
+      27.0,
+      392.0
+     ]
+    ],
+    [
+     [
+      100.0,
+      364.0
+     ],
+     [
+      162.0,
+      364.0
+     ],
+     [
+      162.0,
+      382.0
+     ],
+     [
+      100.0,
+      382.0
+     ]
+    ],
+    [
+     [
+      172.0,
+      360.0
+     ],
+     [
+      236.0,
+      361.0
+     ],
+     [
+      235.0,
+      391.0
+     ],
+     [
+      171.0,
+      390.0
+     ]
+    ]
+   ],
+   "scores": [
+    0.9999,
+    1.0,
+    1.0,
+    0.9997,
+    1.0,
+    0.9999,
+    1.0,
+    0.9999,
+    1.0,
+    1.0,
+    0.9999,
+    1.0,
+    1.0,
+    0.9982,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0
+   ]
+  },
+  "rotated15.png": {
+   "cer": 0.0,
+   "gt_chars": 58,
+   "file": "rotated15.png",
+   "ms": 825.0,
+   "n_boxes": 1,
+   "text": "The quick brown fox jumps over 13 lazy dogs on 2026-07-05.",
+   "lines": [
+    "The quick brown fox jumps over 13 lazy dogs on 2026-07-05."
+   ],
+   "raw_lines": [
+    "The quick brown fox jumps over 13 lazy dogs on 2026-07-05."
+   ],
+   "boxes": [
+    [
+     [
+      65.0,
+      357.0
+     ],
+     [
+      1141.0,
+      66.0
+     ],
+     [
+      1155.0,
+      119.0
+     ],
+     [
+      79.0,
+      409.0
+     ]
+    ]
+   ],
+   "scores": [
+    0.9999
+   ]
+  },
+  "low_contrast.png": {
+   "cer": 0.0,
+   "gt_chars": 58,
+   "file": "low_contrast.png",
+   "ms": 807.5,
+   "n_boxes": 1,
+   "text": "The quick brown fox jumps over 13 lazy dogs on 2026-07-05.",
+   "lines": [
+    "The quick brown fox jumps over 13 lazy dogs on 2026-07-05."
+   ],
+   "raw_lines": [
+    "The quick brown fox jumps over 13 lazy dogs on 2026-07-05."
+   ],
+   "boxes": [
+    [
+     [
+      13.0,
+      17.0
+     ],
+     [
+      1261.0,
+      17.0
+     ],
+     [
+      1261.0,
+      72.0
+     ],
+     [
+      13.0,
+      72.0
+     ]
+    ]
+   ],
+   "scores": [
+    0.9941
+   ]
+  }
+ },
+ "models": {
+  "det": "/root/gemma4-gpu-optim/models-dl/ppocrv6_det/inference.onnx",
+  "rec": "/root/gemma4-gpu-optim/models-dl/ppocrv6_rec/inference.onnx",
+  "dict": "/root/gemma4-gpu-optim/models-dl/ppocrv6_rec/ppocrv6_dict.txt"
+ }
+}
