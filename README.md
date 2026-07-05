@@ -12,6 +12,42 @@ one set of weights in memory, one KV cache, one port:
 | `POST /v1/embeddings` | OpenAI-style embeddings (3840-dim, mean-pooled, L2-normalized) — ⚠️ **API-compatible but not semantically useful** (measured: unrelated pairs can score *higher* than related ones); for retrieval/RAG run the [146 MB embedding sidecar](docs/embeddings.md) |
 | `GET /health`, `POST /tokenize`, … | usual llama-server extras |
 
+## What's new in v0.6.0 — embeddings and ingest, baked in ([full changelog](CHANGELOG.md))
+
+**A real embedding model inside the file.** The APE now carries
+[Qwen3-Embedding-0.6B](https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF)
+(Apache-2.0, 1024-dim, Matryoshka-truncatable) and re-spawns **itself** as a
+supervised CPU embedding sidecar on startup, reverse-proxied at
+`/embed/v1/embeddings`, `/embed/health` and `/embed/tokenize`. No systemd
+unit, no second download — one file serves chat *and* semantically useful
+embeddings. (The 12B's own `/v1/embeddings` remains what it always was — a
+decoder-only model's anisotropic vectors; use `/embed/v1/embeddings` for
+retrieval. Measured comparison: [docs/embeddings.md](docs/embeddings.md).)
+Opt out with `LLAMAFILE_NO_EMBED=1`.
+
+**`POST /v1/ingest` — text in, retrieval-ready JSON out.** The document
+pipeline developed in [bench/ingest/](bench/ingest/) runs *inside* the
+server for text input: one grammar-constrained enrichment call (title,
+summary, entities, task domain, chunking hints — valid JSON by
+construction), a **deterministic fidelity gate** that drops entities not
+grounded in the source (composed dates and mutated numbers never reach your
+index; strict date-tuple and digit matching), token-budgeted chunking, and
+1024-dim embeddings for the document and every chunk — returned as one
+`ingest.v1` envelope for hybrid BM25 + vector indexing. File/PDF/audio
+ingest with OCR runs in the companion Python worker
+([bench/ingest/ingest_worker.py](bench/ingest/ingest_worker.py)) until the
+OCR runtime is APE-portable.
+
+Quality numbers behind this release (all reproducible from
+[bench/](bench/), data on the
+[HF bench dataset](https://huggingface.co/datasets/SEBK4C/gemma4-serving-bench-data)):
+enrichment schema-validity 6/6 first-try with the prompt-injection probe
+resisted; labeled CORD-v2 receipts: key-field recall 100% end-to-end, gate
+false-drop 0%, hallucinated-number rate 6.7% (flag-only); Flickr30k people
+photos findable by caption through enrichment text at hit@1 0.857; native
+STT WER 3.0% on LibriSpeech test-clean (16 kHz mono — the audio encoder is
+speech-only, see the research history).
+
 ## What's new in v0.2.0 — GPU + voice ([full changelog](CHANGELOG.md))
 
 **NVIDIA GPU inference in the packaged file.** The APE now bakes in a
@@ -104,6 +140,14 @@ curl http://127.0.0.1:8080/v1/chat/completions -H 'Content-Type: application/jso
 
 curl http://127.0.0.1:8080/v1/embeddings -H 'Content-Type: application/json' \
   -d '{"input":["the sky is blue","der Himmel ist blau"]}'
+
+# v0.6.0: retrieval-grade embeddings from the baked sidecar
+curl http://127.0.0.1:8080/embed/v1/embeddings -H 'Content-Type: application/json' \
+  -d '{"input":["the sky is blue","der Himmel ist blau"]}'
+
+# v0.6.0: text -> enriched JSON + fidelity gate + chunks + vectors
+curl http://127.0.0.1:8080/v1/ingest -H 'Content-Type: application/json' \
+  -d '{"text":"Invoice 104 from GridPower: 412 kWh, total 87.40 EUR, due April 15.","name":"invoice.txt"}'
 ```
 
 Or with the zero-dependency Python client:

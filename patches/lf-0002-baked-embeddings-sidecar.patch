@@ -12,10 +12,10 @@ index 6d4cbcb..b36e03c 100644
  
 diff --git a/llamafile/embed.c b/llamafile/embed.c
 new file mode 100644
-index 0000000..b50e21b
+index 0000000..aafa9d6
 --- /dev/null
 +++ b/llamafile/embed.c
-@@ -0,0 +1,99 @@
+@@ -0,0 +1,111 @@
 +// -*- mode:c;indent-tabs-mode:nil;c-basic-offset:4;coding:utf-8 -*-
 +// vi: set et ft=c ts=4 sts=4 sw=4 fenc=utf-8 :vi
 +#define _COSMO_SOURCE // makedirs()
@@ -86,14 +86,26 @@ index 0000000..b50e21b
 +    // Re-exec ourselves as the embedding server under a 2s respawn loop in
 +    // its own process group (same supervision pattern as voice.c). stdout/
 +    // stderr silenced — the child's startup log would interleave with ours.
++    //
++    // The loop is tied to the MAIN SERVER'S LIFETIME, not just atexit():
++    // atexit only runs on orderly exit — a SIGKILL'd main server would leak
++    // the supervisor forever, and the next launch then crash-loops on the
++    // taken port (observed: stacked orphans on 8081/8078 after kill -9).
++    // Every 2 s the loop checks the parent pid and tears itself + the
++    // in-flight sidecar down when the parent is gone.
 +    const char *self = GetProgramExecutableName();
-+    char cmd[768];
++    char cmd[1024];
 +    snprintf(cmd, sizeof(cmd),
-+             "while :; do LLAMAFILE_NO_EMBED=1 LLAMAFILE_NO_VOICE=1 "
++             "P=%d; "
++             "while kill -0 $P 2>/dev/null; do "
++             "LLAMAFILE_NO_EMBED=1 LLAMAFILE_NO_VOICE=1 "
 +             "/bin/sh \"$1\" --server -m \"$2\" --embeddings --pooling last "
 +             "--host 127.0.0.1 --port %s -ngl 0 --spec-type none --no-mmproj "
-+             "-c 4096 -ub 512 -np 2 --threads 4 >/dev/null 2>&1; sleep 2; done",
-+             EMBED_PORT);
++             "-c 4096 -ub 512 -np 2 --threads 4 >/dev/null 2>&1 & C=$!; "
++             "while kill -0 $C 2>/dev/null && kill -0 $P 2>/dev/null; do sleep 2; done; "
++             "kill -0 $P 2>/dev/null || { kill $C 2>/dev/null; exit 0; }; "
++             "sleep 2; done",
++             (int) getpid(), EMBED_PORT);
 +    char *argv[] = {"/bin/sh", "-c", cmd, "g4embed", (char *)self, gguf, (char *)0};
 +    extern char **environ;
 +    pid_t pid;

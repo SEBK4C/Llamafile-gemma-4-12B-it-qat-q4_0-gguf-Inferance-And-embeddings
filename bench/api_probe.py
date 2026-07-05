@@ -312,11 +312,49 @@ class Suite:
             self.rec(f"unsupported_{name}", f"{method} {path}", r["code"] == 501, r["wall"],
                      f"expect 501 (off by default / model lacks FIM), got {r['code']}")
 
+    # --- v0.6.0: baked embeddings + ingest (skipped gracefully on older builds)
+    def t_embed_baked(self):
+        r = http(self.base, "/embed/v1/embeddings", "POST",
+                 {"input": ["cat", "kitten", "spreadsheet"], "model": "embed"}, timeout=120)
+        if r["code"] in (0, 404):
+            return self.rec("embed_baked", "POST /embed/v1/embeddings", None, r.get("wall"),
+                            "no baked embedder in this build (pre-v0.6.0) — skipped")
+        data = jbody(r).get("data") or []
+        if len(data) != 3:
+            return self.rec("embed_baked", "POST /embed/v1/embeddings", False, r["wall"], jbody(r))
+        vecs = [d["embedding"] for d in data]
+        dot = lambda a, b: sum(x * y for x, y in zip(a, b))
+        import math
+        cs = lambda a, b: dot(a, b) / (math.sqrt(dot(a, a)) * math.sqrt(dot(b, b)))
+        ok = cs(vecs[0], vecs[1]) > cs(vecs[0], vecs[2])
+        self.rec("embed_baked", "POST /embed/v1/embeddings", ok, r["wall"],
+                 f"dims={len(vecs[0])} cos(cat,kitten)={cs(vecs[0],vecs[1]):.3f} > "
+                 f"cos(cat,spreadsheet)={cs(vecs[0],vecs[2]):.3f}")
+
+    def t_ingest(self):
+        body = {"text": "Invoice 104 from GridPower: 412 kWh, total 87.40 EUR, due April 15.",
+                "name": "probe.txt"}
+        r = http(self.base, "/v1/ingest", "POST", body, timeout=600)
+        if r["code"] in (0, 404):
+            return self.rec("ingest", "POST /v1/ingest", None, r.get("wall"),
+                            "no /v1/ingest in this build (pre-v0.6.0) — skipped")
+        j = jbody(r)
+        ok = (j.get("schema_version") == "ingest.v1" and j.get("enrich_ok") is True
+              and isinstance(j.get("chunks"), list) and j["chunks"]
+              and isinstance(j.get("doc_embedding"), list) and len(j["doc_embedding"]) >= 256
+              and (j.get("enrichment") or {}).get("task_domain") in
+                  ("code", "law", "med", "home_office", "unstructured"))
+        self.rec("ingest", "POST /v1/ingest", ok, r["wall"],
+                 f"enrich_ok={j.get('enrich_ok')} domain={(j.get('enrichment') or {}).get('task_domain')} "
+                 f"chunks={len(j.get('chunks') or [])} doc_dims={len(j.get('doc_embedding') or [])} "
+                 f"fidelity={j.get('fidelity', {}).get('entities_grounded')}/{j.get('fidelity', {}).get('entities_total')}")
+
     def run(self, quick=False):
         for t in [self.t_health, self.t_props, self.t_models, self.t_tokenize,
                   self.t_chat, self.t_chat_stream, self.t_completions_v1, self.t_completion_native,
                   self.t_messages, self.t_messages_stream, self.t_count_tokens, self.t_responses,
-                  self.t_embeddings, self.t_embeddings_sidecar]:
+                  self.t_embeddings, self.t_embeddings_sidecar,
+                  self.t_embed_baked, self.t_ingest]:
             t()
         if not quick:
             self.t_vision(); self.t_tts(); self.t_audio_in()
