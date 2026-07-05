@@ -36,11 +36,11 @@ ax.set_xlim(0, max(vals) * 1.35)
 for y, r in zip(ys, rows):
     mark = "✓ PASS" if r["verdict"] == "PASS" else "✗ FAIL"
     ax.text(r["wall_s"] + max(vals) * 0.02, y,
-            f"{r['wall_s']}s · {r['turns']} turns  {mark}",
+            f"{r['wall_s']}s{f" · {r['turns']} turns" if r.get('turns') else ''}  {mark}",
             va="center", fontsize=8.5, color=INK2 if r["verdict"] == "PASS" else CRIT,
             fontweight="normal" if r["verdict"] == "PASS" else "bold", zorder=4)
 
-fig.suptitle("Coding-harness e2e vs local Gemma 4 12B (/v1/messages)",
+fig.suptitle("Coding-harness e2e vs local Gemma 4 12B — both agent surfaces",
              x=0.34, ha="left", fontsize=12.5, fontweight="bold", color=INK, y=0.95)
 fig.text(0.34, 0.80, f"{rep['model']} · {rep['server'].split('(')[0].strip()} · client: {rep['client_env'].split(':')[0]} · {rep['date']}",
          fontsize=8.5, color=INK2)
