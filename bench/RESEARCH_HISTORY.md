@@ -1317,3 +1317,37 @@ loop). VARIETY/EM/Q backlog resumes post-release.
   already records it, now twice re-earned.
 - **NEXT tick**: /ingest text-route in the fork server (tick 2), README
   draft; release finalization once CUDA e2e clears.
+
+## V6 tick 2 ✅ (2026-07-06) — /v1/ingest IN the APE; gate ported to C++
+## after failing its own acceptance test once
+- **Shipped** (patch `0020-server-embed-proxy-and-ingest.patch`, replaces
+  the tick-1 0020): `POST /v1/ingest` + `/ingest` on the packaged server —
+  server-side orchestration entirely inside the APE: (1) grammar
+  enrichment via HTTP loopback to its own /v1/chat/completions (v1
+  schema + F21 domain-enumerated prefix + DRY per F24 + thinking off,
+  temp 0), (2) a C++ port of the Q1 fidelity-gate core, (3) blank-line
+  paragraph chunking packed to ~512 tokens via the baked sidecar's
+  /tokenize (chars/4 fallback), (4) doc-summary + per-chunk embeddings
+  from the sidecar, (5) an ingest.v1 envelope (id = FNV-1a64 of the text,
+  labeled `text_hash_fnv64` — not claimed as sha256). Registered only
+  when the embed payload is present and not on unix-socket binds.
+- **The build FAILED its own acceptance test first — and that is the
+  story worth keeping**: the C++ digit extractor split "2026-06-30" at
+  the hyphens into {2026, 06, 30}, each present separately in the source,
+  so the composed date PASSED the gate — I reimplemented in C++ exactly
+  the fragment hole fidelity.py's own docstring warns about. Fixed by
+  porting the date-TUPLE rule (regex → (y,m,d), entity dates must match
+  source dates; date substrings stripped before residual digit checks).
+  Rerun: kept [Hauptstrasse 12, 1800 EUR], dropped [2026-06-30], flagged.
+  **Lesson (F-class): a reference implementation's documented traps are
+  part of its spec — port the tests (T1 acceptance) before the code.**
+- **e2e (CPU, standalone APE)**: /v1/ingest on the lease text → law
+  domain, correct title, gate verdict identical to the python worker,
+  1 chunk @ 68 tok, 1024-dim doc+chunk vectors. /embed/*, /tts, chat all
+  still green after the rebuild. APE 8.63 GB.
+- **Scope note**: the APE gate covers substring + strict digits + date
+  tuples + token-subset; month-name dates and amount-format nuances
+  remain python-only (documented in the envelope's fidelity.note).
+  File/OCR ingest stays external until I12.
+- **STILL GATED**: full-CUDA e2e (needs Sebastian's ~4-min prod-pause go)
+  → then README + GitHub/HF v0.6.0 publish, per his own sequencing.
