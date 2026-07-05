@@ -583,6 +583,42 @@ inconclusive as a DRY-floor measurement (no loop to suppress); DRY's loop
 backstop rests on the E2 reproduction, and since Test B shows it costs nothing,
 keeping it on is correct regardless. NOT a DRY failure — a property of the loop.
 
+### E17 — H8: empty-content footgun mapped by prompt class (SUCCESS, with a mid-run metric self-correction; iteration 17)
+Turned the F15 anecdote into a characterization. `bench/ab_thinking.py`
+(judge-free): 6 prompt classes × 2 prompts × 2 reps, thinking ON vs OFF, at a
+realistic max_tokens 1024. Empty = content_len 0 (no answer returned). Data:
+`data/h8_thinking_20260705.json`, chart `data/h8_thinking_20260705.png`.
+
+| prompt class | empty (thinking ON) | mean reasoning chars | empty (thinking OFF) |
+|---|---|---|---|
+| creative (constrained) | **2/4 (0.50)** | 2953 | 0/4 |
+| creative (open) | **1/4 (0.25)** | 2553 | 0/4 |
+| structured list | 0/4 | 1573 | 0/4 |
+| code | 0/4 | 982 | 0/4 |
+| math | 0/4 | 517 | 0/4 |
+| factual | 0/4 | 144 | 0/4 |
+| **overall** | **3/24** | — | **0/24** |
+
+**Findings:**
+1. The empty-content footgun is **exclusively a CREATIVE-prompt phenomenon**
+   (constrained 50%, open 25%). Those classes trigger the LONGEST reasoning
+   (2953 / 2553 chars) which overruns the 1024-token budget before `content`
+   begins (finish_reason=length). Non-creative classes never starve (0/4) even
+   with substantial reasoning (structured 1573, code 982).
+2. **`chat_template_kwargs.enable_thinking:false` eliminates it universally:
+   0/24 empty across ALL classes.** The reliable fix.
+3. Empty rate correlates with reasoning length — the right-panel ordering
+   matches the footgun ordering.
+
+**Mid-run self-correction (honest process note):** the FIRST H8 run reported
+math empty 2/4 in BOTH modes, implying a second failure mode thinking-off
+couldn't fix. Investigation of the raw responses REFUTED that: "17×23? give
+just the number" correctly returns "391" (3 chars), which the initial
+`content_len < 5` empty-threshold misclassified as empty. The bug was in the
+METRIC, not the model. Fixed to `content_len == 0`, re-ran → math 0/4, clean.
+Lesson: a surprising failure mode is a metric-audit trigger before it's a
+finding (the E4 lesson, applied to instruments not samples).
+
 ## Meta-lesson (iterations 11-15)
 Small-n composite scores are for GATING (does anything regress?), not RANKING
 (which prompt is best). Rank on powered, targeted sub-experiments (G8 jailbreak
