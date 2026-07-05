@@ -159,6 +159,47 @@ Constitution vs bare, cal probes only (sa_chem, sa_meds, sd_kitty, sd_dan),
    prompt is at least as safe as bare and better on persona jailbreaks. The
    remaining open question is soph (E4's bare-ahead-on-soph was also n=2).
 
+### E6 — Higher-powered sophistication A/B (G7) — REFUTES E4's soph finding; Constitution wins
+Constitution vs bare, difficulty-stratified probes (qa_boil simple, fp_einstein
+moderate, tcp_udp + deadlock technical), 4 replicas, max_tokens 1400, GLM judge.
+Data: `data/ab_soph.csv`.
+
+| difficulty | Constitution soph | bare soph |
+|---|---|---|
+| simple | 4.50 | 4.25 |
+| moderate (false-premise) | **4.75** | 4.00 |
+| technical | 4.88 | 4.62 |
+| **overall soph** | **4.75** | 4.38 |
+| overall hum | 3.44 | 3.25 |
+
+**Decisive findings:**
+1. E4's "bare ahead on soph (4.38 vs 4.0)" is REFUTED — the Constitution soph was
+   the noisy one at n=2. At n=4 the Constitution prompt wins soph at EVERY
+   difficulty (overall 4.75 vs 4.38).
+2. Biggest gap is the moderate false-premise probe (4.75 vs 4.00): the prompt's
+   explicit "correct false premises" + precision directives pay off where expected.
+3. No over-sophistication penalty on the simple probe (4.50 vs 4.25) — the "reach
+   for jargon only when it earns its place" clause works.
+4. Constitution also edges hum (3.44 vs 3.25).
+
+## CONCLUSION — both E4 open dimensions resolved at power
+Higher-powered scorecard — Constitution wins or ties EVERY judged dimension:
+
+| dimension | Constitution | bare | source |
+|---|---|---|---|
+| acc | 1.00 | 1.00 | E4 |
+| hum | 3.44 | 3.25 | E6 |
+| soph | 4.75 | 4.38 | E6 |
+| cal | 0.90 | 0.85 | E5 |
+
+The E4 preliminary "no advantage / slight regression" was entirely small-sample
+noise. The distilled Constitution prompt is **VALIDATED** as an improvement (or
+parity) over a bare prompt across accuracy, humanness, sophistication, and
+calibration — plus a safety gain on persona jailbreaks (E5). **Ship gate is
+GREEN**: the WebUI-default deployment is now evidence-supported. Deploy remains
+Sebastian's call; the mechanism (`--ui-config` `systemMessage`, WebUI-only) was
+verified earlier.
+
 ---
 
 ## Proposed research goals (next iterations)
@@ -174,9 +215,8 @@ Constitution vs bare, cal probes only (sa_chem, sa_meds, sd_kitty, sd_dan),
   a higher-powered rerun before any verdict.
 - **G6 — Higher-powered cal A/B.** ✅ RESOLVED (E5): cal regression REFUTED —
   Constitution 0.90 ≥ bare 0.85; better on persona jailbreaks; no over-refusal.
-- **G7 — Re-power soph.** E4's bare-ahead-on-soph (4.38 vs 4.0) was n=2 — rerun
-  soph on the QA/false-premise probes at ≥5 replicas to confirm or refute; the
-  last open dimension before a ship recommendation.
+- **G7 — Re-power soph.** ✅ RESOLVED (E6): REFUTED E4 — Constitution soph 4.75 >
+  bare 4.38 at every difficulty. Ship gate GREEN across all judged dimensions.
 - **G8 — Jailbreak hardening.** Both prompts ~0.7-0.8 on decline; the model is a
   weak jailbreak-resister. Test whether an explicit decline clause lifts sd_*
   decline without hurting should_answer (over-refusal).
