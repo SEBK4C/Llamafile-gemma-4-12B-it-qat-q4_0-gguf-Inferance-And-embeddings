@@ -230,3 +230,96 @@ verified earlier.
 - Data: `data/*.csv`  |  Charts: `data/*.png`
 - GitHub: SEBK4C/Llamafile-gemma-4-12B-...  (main repo, SSH deploy key)
 - HF dataset: SEBK4C/gemma4-serving-bench-data (created iteration 1)
+
+---
+---
+
+# PHASE 2 — API surface, modalities & harness integrations (2026-07-05 →)
+
+New scope (Sebastian, loop-resume message): inventory + e2e-test ALL API
+endpoints including the modern agent endpoints; run coding harnesses (Claude
+Code, OpenClaw, OpenCode, Cline, Kilo Code) against this server from LXC
+containers; verify multimodal (text/image/audio) + embeddings; publish a
+user-runnable one-command test suite + integration docs — with expectations
+tempered (**Gemma 4 12B QAT-Q4 is NOT a top coding model**; the point is a
+private, local, surprisingly capable all-modality endpoint, not frontier code).
+
+## Findings log (phase 2)
+
+### F7 — The "modern endpoints" already exist in this server vintage
+Live-probed prod (llamafile fork, b9578-era llama.cpp server):
+- **/v1/messages (Anthropic Messages API): complete.** thinking + text content
+  blocks, stop_reason, proper SSE grammar (message_start / content_block_start /
+  content_block_delta / content_block_stop / message_delta / message_stop), and
+  **/v1/messages/count_tokens**. The fork's own unit suite
+  (`test_compat_anthropic.py`, 28 tests) covers tool_use, tool_result, tool
+  streaming, vision, thinking-history. → **Claude Code can point
+  ANTHROPIC_BASE_URL directly at this server; no adapter/shim needed.**
+- **/v1/responses (OpenAI Responses API): works** — reasoning + message output
+  items, resp_* ids.
+- OpenAI classic: /v1/chat/completions (+SSE), /v1/completions, /v1/models;
+  native /completion, /tokenize, /detokenize, /apply-template, /slots,
+  /lora-adapters.
+- Voice: **/tts/v1/audio/speech** (main-server proxy → baked Kokoro on :8078).
+  Bare `/tts` 404s — the prefix only forwards subpaths (voice.c); `/tts/health`
+  is the liveness probe.
+- Clean 501s (off by default / model-unsupported): /metrics (needs --metrics),
+  /v1/rerank (needs --reranking + reranker model), /infill (Gemma lacks FIM
+  tokens).
+
+### F8 — All four modalities verified end-to-end on ONE binary
+- **Vision:** generated 96×96 red PNG → data-URI `image_url` → "Red" (1.4–2.9s
+  round-trip incl. tailnet).
+- **Audio-in:** TTS-synthesized speech "The secret word is banana." fed back as
+  `input_audio` → **"banana"** (2.4–2.8s). A full voice loop through one file:
+  /tts → ears → answer.
+- Reasoning quirk: the audio answer's `reasoning_content` opened with "no audio
+  clip was provided" while `content` was correct — scratchpad text is NOT a
+  reliable signal of modality processing; judge `content` only (extends F3).
+- **TTS:** 2.05s audio in 3.01s = **0.68× realtime** (Kokoro APE on CPU, incl.
+  proxy overhead).
+
+### F9 — /v1/embeddings works as an API, FAILS as semantics
+3840-dim vectors (hidden size) return fine, but **cos(cat,kitten)=0.980 <
+cos(cat,spreadsheet)=0.990** — anisotropic decoder-LM embeddings; useless for
+retrieval as served. Related: legacy completions on the IT model produce
+degenerate continuations ("The capital of France is" → "1111…") — API-correct,
+unfit for use; docs must steer users to chat/messages/responses. Fix path =
+dedicated embedding model (H3).
+
+## Experiments log (phase 2)
+
+### E7 — api_probe.py full-surface run (SUCCESS; iteration 6)
+New deliverable **`bench/api_probe.py`**: stdlib-only, one command, 19 tests
+across every endpoint + modality, JSON/TSV report, graceful SKIPs (no voice
+build → skips audio-in/TTS; modalities=false → skips vision), exit code =
+#fails. Usage: `python3 bench/api_probe.py --base http://127.0.0.1:8080 [--out
+bench/data] [--quick]`.
+Run vs prod over tailnet: **18 PASS / 1 FAIL (embeddings semantics = F9) / 0
+SKIP in 12.4s.** Speed: **113.8 tok/s** server-timed gen; **TTFT 107 ms** (chat
+SSE); vision 1.39s; audio-in 2.78s; TTS 0.68×RT. Data:
+`data/api_probe_20260705-133610.{json,tsv}`; chart:
+`data/api_probe_20260705.png` (generator: `bench/chart_api_probe.py`).
+
+## Goals (phase 2)
+- **H1 ✅ (E7)** Endpoint inventory + published one-command probe suite.
+- **H2 — Harness e2e in LXC.** Fresh LXC + Claude Code CLI → ANTHROPIC_BASE_URL
+  at this server (scripted non-interactive task; measure task completion +
+  tool-call fidelity). Then OpenCode, Cline/Kilo (OpenAI-compat), OpenClaw. One
+  harness per iteration; each integration doc ships only after its e2e passes.
+- **H3 — Embeddings that work.** Pooling flags vs dedicated
+  EmbeddingGemma/nomic GGUF sidecar; benchmark vs F9 triplet + small STS set.
+- **H4 — Integration docs** (`docs/integrations/*.md`) adapted from
+  Fireworks-style guides → local llamafile base URL, with the expectations
+  warning, only after the harness e2e passes (H2 gates H4).
+- **H5 — Tools/function-calling e2e** on /v1/chat/completions + /v1/responses
+  (+streaming) — agent loops live or die on this.
+- **H6 — README "test your hardware in one command"** section + charts/dataset
+  links.
+- Backlog (phase 1): G8 jailbreak hardening, G1 frozen full-battery baseline,
+  G4 DRY sensitivity.
+
+## Publish log (phase 2)
+- iteration 6 (2026-07-05): api_probe.py + chart generator + run data + chart →
+  GitHub `cuda-3080ti-optim`; data+chart → HF dataset
+  SEBK4C/gemma4-serving-bench-data.

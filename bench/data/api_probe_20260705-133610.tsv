@@ -1,0 +1,20 @@
+test	endpoint	status	wall_s	ttft_s	tok_s_wall	tok_s_server	detail
+health	GET /health	PASS	0.007				{'status': 'ok'}
+props	GET /props	PASS	0.005				model=gemma-4-12b-it-qat-q4_0.gguf ctx=131072 vision=True audio=True
+models	GET /v1/models	PASS	0.005				['gemma-4-12b-it-qat-q4_0.gguf']
+tokenize_roundtrip	POST /tokenize+/detokenize	PASS	0.009				2 tokens -> 'hello world'
+chat_completions	POST /v1/chat/completions	PASS	3.02		130.1		content='The sky is blue because the atmosphere scatters shorter blue wavelengths of sunlight more tok/s(wall)=130.1
+chat_stream	POST /v1/chat/completions (SSE)	PASS	0.462	0.107			chunks=61 ttft=0.11s
+completions_v1	POST /v1/completions	PASS	0.172				'1111111111111111'
+completion_native	POST /completion	PASS	0.17			113.8	content='8877777777777777' server-tok/s=113.8
+messages_anthropic	POST /v1/messages	PASS	0.454				blocks=['thinking', 'text'] text='PONG' stop=end_turn
+messages_stream	POST /v1/messages (SSE)	PASS	0.438	0.066			events={'message_start': 1, 'content_block_start': 2, 'content_block_delta': 64, 'content_block_stop': 2, 'message_delta': 1, 'message_stop': 1} ttft=0.07s
+count_tokens	POST /v1/messages/count_tokens	PASS	0.007				input_tokens=18
+responses_api	POST /v1/responses	PASS	0.344				output_types=['reasoning', 'message'] text='PONG'
+embeddings	POST /v1/embeddings	FAIL	0.058				dims=3840 cos(cat,kitten)=0.980 > cos(cat,spreadsheet)=0.990 -> semantic sanity
+vision_input	POST /v1/chat/completions	PASS	1.393				expected 'red', got 'Red'
+tts_speech	POST /tts/v1/audio/speech	PASS	3.012				98444B wav, 2.05s audio, 0.68x realtime
+audio_input	POST /v1/chat/completions	PASS	2.78				TTS->ears round-trip; expected 'banana', got 'banana'
+unsupported_metrics	GET /metrics	PASS	0.005				expect 501 (off by default / model lacks FIM), got 501
+unsupported_rerank	POST /v1/rerank	PASS	0.005				expect 501 (off by default / model lacks FIM), got 501
+unsupported_infill	POST /infill	PASS	0.005				expect 501 (off by default / model lacks FIM), got 501
