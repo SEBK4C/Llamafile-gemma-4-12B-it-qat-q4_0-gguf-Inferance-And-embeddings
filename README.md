@@ -9,7 +9,7 @@ one set of weights in memory, one KV cache, one port:
 | Endpoint | What it does |
 |---|---|
 | `POST /v1/chat/completions` | OpenAI-style chat (Gemma 4 chat template, thinking channel in `reasoning_content`) — accepts text, **images** (`image_url` data URIs) and **audio** (`input_audio`, wav/mp3) |
-| `POST /v1/embeddings` | OpenAI-style embeddings (3840-dim, mean-pooled, L2-normalized) |
+| `POST /v1/embeddings` | OpenAI-style embeddings (3840-dim, mean-pooled, L2-normalized) — ⚠️ **API-compatible but not semantically useful** (measured: unrelated pairs can score *higher* than related ones); for retrieval/RAG run the [146 MB embedding sidecar](docs/embeddings.md) |
 | `GET /health`, `POST /tokenize`, … | usual llama-server extras |
 
 ## What's new in v0.2.0 — GPU + voice ([full changelog](CHANGELOG.md))
@@ -61,6 +61,21 @@ make package
 ./dist/gemma4-server.llamafile            # same dual-mode server
 ./dist/gemma4-server.llamafile --port 9000   # CLI args override baked-in ones
 ```
+
+### Test your hardware in one command
+
+```sh
+python3 bench/api_probe.py --base http://127.0.0.1:8080
+```
+
+19 end-to-end tests across every endpoint and modality — chat (plain + SSE),
+Anthropic `/v1/messages`, the Responses API, embeddings, **vision**,
+**audio-in**, **TTS** — each with wall-clock speed on *your* hardware.
+Stdlib-only, no installs. `--quick` skips the media tests; add
+`--embed-base http://127.0.0.1:8081` if you run the
+[embedding sidecar](docs/embeddings.md); `--out bench/data` writes JSON/TSV
+reports. Test protocol, charts and all runs:
+[bench/](bench/) · [test-data repo on HF](https://huggingface.co/datasets/SEBK4C/gemma4-serving-bench-data).
 
 ### Talking to it
 
@@ -623,6 +638,26 @@ cp my.args .args
 ```
 
 The trailing `...` line means command-line flags still override baked ones.
+
+## Agent integrations (tested end-to-end)
+
+> ⚠️ **Set expectations first: Gemma 4 12B is NOT a top coding model.** These
+> harnesses run real agentic loops against this server and complete small,
+> well-scoped tasks at interactive speed, fully offline — that is the point.
+> Do not expect frontier-model software engineering from a 12B QAT-Q4 model:
+> keep tasks tight, cap turns, review every diff.
+
+| Harness | API surface | Status | Guide |
+|---|---|---|---|
+| **Claude Code** 2.1.201 | Anthropic `/v1/messages` (native — no shim) | ✅ e2e: multi-turn file+run tasks, 9.6–12.5 s | [docs/integrations/claude-code.md](docs/integrations/claude-code.md) |
+| **OpenCode** 1.17.13 | OpenAI `/v1/chat/completions` + function calling | ✅ e2e: same tasks, 8–12 s | [docs/integrations/opencode.md](docs/integrations/opencode.md) |
+| **OpenClaw** 2026.6.11 | `openai-completions` provider | ✅ e2e: chat + exec-tool turns, 7–11 s | [docs/integrations/openclaw.md](docs/integrations/openclaw.md) |
+| **Cline / Kilo Code** | OpenAI-compatible (VS Code GUI) | ⚙️ config verified at API level (GUI not automated) | [docs/integrations/cline-kilo.md](docs/integrations/cline-kilo.md) |
+
+Every ✅ was verified end-to-end with independently checked artifacts before
+its guide was published — protocol and raw results in
+[bench/RESEARCH_HISTORY.md](bench/RESEARCH_HISTORY.md) (E8–E11), data + charts in the
+[HF test-data repo](https://huggingface.co/datasets/SEBK4C/gemma4-serving-bench-data).
 
 ## Credits
 

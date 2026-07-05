@@ -16,8 +16,9 @@ rows = rep["results"]
 
 plt.rcParams.update({"font.family": "DejaVu Sans", "text.color": INK,
                      "axes.edgecolor": BASELINE, "xtick.color": MUTED, "ytick.color": INK2})
-fig, ax = plt.subplots(figsize=(10, 3.6), dpi=150, facecolor=PAGE)
-fig.subplots_adjust(left=0.34, right=0.96, top=0.72, bottom=0.16)
+H = 1.7 + 0.60 * len(rows)
+fig, ax = plt.subplots(figsize=(10, H), dpi=150, facecolor=PAGE)
+fig.subplots_adjust(left=0.34, right=0.96, top=1 - 1.15 / H, bottom=0.75 / H)
 ax.set_facecolor(SURFACE)
 
 rows = rows[::-1]
@@ -41,8 +42,8 @@ for y, r in zip(ys, rows):
             fontweight="normal" if r["verdict"] == "PASS" else "bold", zorder=4)
 
 fig.suptitle("Coding-harness e2e vs local Gemma 4 12B — both agent surfaces",
-             x=0.34, ha="left", fontsize=12.5, fontweight="bold", color=INK, y=0.95)
-fig.text(0.34, 0.80, f"{rep['model']} · {rep['server'].split('(')[0].strip()} · client: {rep['client_env'].split(':')[0]} · {rep['date']}",
+             x=0.34, ha="left", fontsize=12.5, fontweight="bold", color=INK, y=1 - 0.28 / H)
+fig.text(0.34, 1 - 0.78 / H, f"{rep['model']} · {rep['server'].split('(')[0].strip()} · client: {rep['client_env'].split(':')[0]} · {rep['date']}",
          fontsize=8.5, color=INK2)
 
 out = sys.argv[2] if len(sys.argv) > 2 else path.replace(".json", ".png")

@@ -380,14 +380,48 @@ both active).
    response.created / in_progress / output_item.added / 28×reasoning_text.delta /
    14×output_text.delta / content_part.done / output_item.done / completed.
 
+### F13 — OpenClaw wiring + a README-vs-reality correction (iteration 10)
+- OpenClaw config schema (from the vendor's own setup script, adapted):
+  `models.providers.<name>{baseUrl, apiKey, api:"openai-completions",
+  models[{id, contextWindow, maxTokens, ...}]}` + `agents.defaults.model.
+  primary "<provider>/<model-id>"`. `openclaw config validate` +
+  `openclaw agents list` confirm the binding before any turn.
+- `openclaw agent` REQUIRES a session target (`--session-key|--agent|--to`);
+  `--local` runs the embedded agent with no gateway daemon. stdin redirect
+  (F11) applies here too.
+- **README correction:** the README advertised the 12B's `/v1/embeddings`
+  ("mean-pooled, L2-normalized") as a headline feature with no quality caveat.
+  E10's measurements contradict that framing — warning + sidecar link added.
+  Lesson: e2e quality tests audit *docs*, not just code.
+
+### E11 — OpenClaw e2e (SUCCESS ×2; iteration 10)
+| test | what | verdict |
+|---|---|---|
+| E11a | chat turn "PONG" through the full agent stack | **PASS** — 11 s; payload exact; session persisted |
+| E11b | exec tool: create `oc_test.txt` exact content + read back | **PASS** — 7 s; artifact verified on disk |
+
+**H2 COMPLETE**: Claude Code + OpenCode + OpenClaw all drive Gemma-4 12B e2e;
+Cline/Kilo shipped as an honest config-level guide (GUI not automatable in the
+lab; the API surface they use is fully verified). **H6 SHIPPED**: README gains
+the one-command test section, the tested-integrations table with the
+expectations warning, and the embeddings correction.
+
 ## Goals (phase 2)
 - **H1 ✅ (E7)** Endpoint inventory + published one-command probe suite.
-- **H2 — Harness e2e in LXC.** ✅ **Claude Code (E8, it.7)**, ✅ **OpenCode (E9,
-  it.8)** — remaining: Cline/Kilo (OpenAI-compat, VS Code — headless-config
-  verification only), OpenClaw; reusing CT 130. Docs ship only after e2e passes.
+- **H2 ✅ COMPLETE (E8 it.7, E9 it.8, E11 it.10)** Claude Code + OpenCode +
+  OpenClaw e2e in LXC; Cline/Kilo = config-level doc (API surface verified).
 - **H3 ✅ (E10)** Embeddings that work — nomic sidecar deployed + documented;
   multi-model pattern proven (F12).
+- **H4 ✅ (its.7-10)** Integration docs shipped, each gated on its e2e:
+  claude-code, opencode, openclaw, cline-kilo (+ embeddings.md).
 - **H5 ✅ (E9a + E10.2)** OpenAI tools + Responses streaming both verified.
+- **H6 ✅ (it.10)** README: one-command hardware test + integrations table +
+  embeddings warning.
+- **Phase-2 core is DONE.** Remaining candidates for next iterations:
+  phase-1 backlog G8 (jailbreak-hardening prompt experiment), G1 (frozen
+  full-battery baseline), G4 (DRY sensitivity); publish-side: HF model-card
+  refresh with the new docs/links; stretch: concurrent-slot experiment
+  (-np 2) for parallel harness use.
 - **H3 — Embeddings that work.** Pooling flags vs dedicated
   EmbeddingGemma/nomic GGUF sidecar; benchmark vs F9 triplet + small STS set.
 - **H4 — Integration docs** (`docs/integrations/*.md`) adapted from
