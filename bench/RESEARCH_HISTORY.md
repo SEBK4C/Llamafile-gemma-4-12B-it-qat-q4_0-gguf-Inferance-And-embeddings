@@ -895,3 +895,38 @@ dedicated text embedder, enrichment JSON doubles as the BM25 corpus.
   uses median of 3.
 - **NEXT**: I3 vision-legibility V-probe (Gemma reads doc_page.png vs this
   OCR ground truth — gates enrichment design), then I4 enrichment schema.
+
+## I3 ✅ (2026-07-05) — V-probe GATE GREEN: prod Gemma-4 vision reads documents
+- **Question**: is the vision path text-legible (mm-embedding.md 2026-06-11
+  patch-geometry bug said rendered text was broken at ANY size; F8 only
+  proved color)? Gates how much I4's enrichment may trust VLM reading.
+- **Method**: `bench/ingest/vprobe.py` — temp-0 transcription via prod
+  /v1/chat/completions (image_url data-URI, enable_thinking=false,
+  cache_prompt=false, eval-lock), scored as CER vs the I2 manifest GT that
+  PP-OCRv6 scored 0.0000 on. 4 conditions (clean_line, receipt,
+  doc_page top-6-lines crop, FULL A4@200dpi) + has_text yes/no on a blank
+  image and the doc page. Data: `bench/data/vprobe_20260705.json`.
+- **Results**: clean_line 0.0000 · receipt 0.0000 · top6 0.0000 ·
+  **full dense A4 0.0076** · has_text 2/2. The June text-legibility bug is
+  NOT present on today's prod chat path at realistic doc resolutions.
+- **F19 (metric lesson, mid-run self-correction)**: receipt first scored
+  "CER 0.6154" with a CHARACTER-PERFECT transcript — the VLM faithfully
+  transcribed the dash separator rulers my GT excluded (detectors skip
+  them, VLMs render them). Fix: filter non-alphanumeric lines from BOTH
+  sides before CER (`content_lines()`). Same lesson class as H8's
+  "surprising failure = audit the METRIC first".
+- **F20 (the important one)**: the ONLY substantive error on the full page
+  is a PRIOR-DRIVEN substitution — GT "The Gemma 4 model" transcribed as
+  "The gpt-4a model". VLM transcription errors are plausible-token
+  rewrites (silent, retrieval-poisoning for names/codes), not random
+  noise; PP-OCRv6 read the same words exactly. **I4 design consequence:
+  enrichment sends image + OCR text with OCR AUTHORITATIVE for verbatim
+  content; vision contributes layout/semantics/visual attributes.**
+- **Also measured**: prompt_tokens ≈ 266-308 for EVERY image regardless of
+  pixel size (480×640 receipt vs 1654×2339 A4) → fixed vision token
+  budget; image prefill cost is ~constant and small, so I4's single
+  enrichment call is cheap. Flip side: legibility through ~300 tokens has
+  a density ceiling — tiny fonts on busy real-world scans will fail before
+  these clean renders do; photographed fixtures queued with I5.
+- **NEXT**: I4 enrichment call (ingest.v1 schema + grammar + thinking off,
+  OCR-authoritative prompt framing per F20); backlog I1b, I13.
