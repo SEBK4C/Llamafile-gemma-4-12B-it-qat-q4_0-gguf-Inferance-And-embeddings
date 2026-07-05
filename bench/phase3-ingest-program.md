@@ -210,9 +210,41 @@ the query router applies at search time.
   embed.service; egemma stays the fallback. Payload `embedding_model` +
   `pipeline_version` make the re-embed migration clean.
 
-Order: I1→I2→I3→**I13**→I4→I5→I6→I7→I8→I9→I10→I11→I12 (+I1b folded into
-I13's re-A/B). I3 gates I4's design; I9 gates calling the phase done;
-I11/I12 are the "next llamafile build" deliverables.
+## P-SPRINT (Sebastian 2026-07-05, 15-min ticks): performance before variety
+
+Directive: "before running all the datasets we should run speed and
+performance optimizations self-improvement for a few hours until it's
+solid. then data end-to-end testing for variety." Loop cadence is now
+**15 minutes** — scope each tick accordingly.
+
+Baseline (I6 chain smoke, serial, single doc): route 86 ms · OCR 1884 ms ·
+enrich 3468 ms · chunk 15 ms · embed 1183 ms = **6.6 s/doc ≈ 9 docs/min**.
+
+- **P1 — pipelined batch worker (I7 core).** ingest_worker.py: stage
+  pools (OCR on CPU ∥ enrichment on GPU C=2 per H7's 1.37× overlap ∥
+  embed on CPU), fixed 20-file mixed batch, measure docs/min serial vs
+  pipelined. Deliver the worker library the /v1/ingest service wraps.
+- **P2 — enrichment budget.** Output tokens dominate (~350 tok @ ~110
+  t/s). Tighter maxLengths / drop low-value fields per source_type /
+  measure quality-neutrality on the I4 battery (expect_ok must stay 6/6).
+- **P3 — OCR tier + threads.** PP-OCRv6 small/tiny vs medium on the
+  golden fixtures (CER vs ms), onnxruntime intra-op threads sweep.
+- **P4 — embed path.** In-CT localhost vs tailnet HTTPS overhead, batch
+  sizes, MRL 512 (EM3 fold-in), -np/threads on the sidecar.
+- **P5 — contention re-check.** Sprint config vs interactive chat (H7
+  refresh under real ingest load); GPU-yield policy validated.
+- **Exit gate ("solid")**: two consecutive P-ticks improve pipeline
+  docs/min by <5% → freeze the config, record it, move to VARIETY.
+- **VARIETY (after gate)**: dataset-variety e2e — full real_eval suite +
+  EM1 BEIR harness + larger Flickr/FUNSD/LibriSpeech samples + mixed
+  100-file batch through the worker; failures become fixtures.
+
+Order: I1→I2→I3→**I13**→I4→I5→I6→**P1…Pn(+EM ticks)**→VARIETY→I7(service
+wrap)→I8-tail→I9→I10→I11→I12. I9 still gates the phase; I11/I12 remain
+the "next llamafile build" deliverables. EM goals
+(bench/ingest/embed-research-program.md) interleave inside the sprint
+where they are performance-relevant (EM3 MRL) and inside VARIETY where
+they are quality-relevant (EM1/EM2/EM4).
 
 ## Guardrails
 

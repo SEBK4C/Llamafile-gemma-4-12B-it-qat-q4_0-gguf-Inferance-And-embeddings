@@ -1117,3 +1117,34 @@ and deployed. Includes I1b (hardened fixture).
   (fact queries hit the containing chunk of RESEARCH_HISTORY top-3).
 - **NEXT**: I7 /v1/ingest worker (chain_smoke → service with sha256
   idempotency + ledger), then I9 hybrid store (phase gate).
+
+# P-SPRINT (2026-07-05, Sebastian's redirect): performance before variety
+Loop re-armed at **15-minute** cadence (one combined loop — two parallel
+loops would fight over the single GPU and the eval-lock). Priority:
+P-goals until the <5%-twice exit gate, THEN dataset-variety e2e.
+Program section: bench/phase3-ingest-program.md § P-SPRINT.
+
+## P1 ✅ (2026-07-05) — pipelined ingest worker: 11.7 → 18.8 docs/min (1.60×)
+- **Deliverable**: `bench/ingest/ingest_worker.py` (the I7 core):
+  route → OCR/STT → grammar enrichment → hint chunking → embeddings →
+  ingest.v1 envelope at OUT/<sha256>.json (sha256 = idempotency; skipped
+  unless --force). Pipelining = per-doc threads bounded by per-STAGE
+  semaphores (ocr 2 CPU ∥ enrich 2 GPU per H7's C=2 overlap ∥ embed 2
+  CPU); whole batch under the eval-lock; OCR engine warmed once, shared
+  (thread-safe init).
+- **Batch**: 22 real mixed files — text/scan/mixed PDFs, CSV, code, md,
+  EXIF JPEG, fake DNG, silence WAV (audio path exercised end-to-end:
+  STT → envelope), chart PNG, 5 Flickr photos, 5 FUNSD scans.
+- **Results** (`p1_worker_20260705.json`): serial 112.5 s = **11.73
+  docs/min**; pipeline 70.3 s = **18.77 docs/min = 1.60×**; 0 failures
+  either mode. Enrich busy 130.6 s across 2 slots ≈ 2× wall → **GPU ~93%
+  utilized; enrichment is THE bottleneck** (per-request latency inflates
+  under C=2 exactly as H7 predicted, aggregate still wins). OCR busy
+  doubles under 2-thread contention (19.4→44.9 s summed) but stays off
+  the critical path.
+- **Next levers (queued)**: P2 enrichment output budget (~350 tok @
+  ~110 t/s dominates; tighter maxLengths / per-source_type field
+  trimming, quality-gated by the I4 battery staying 6/6); maybe enrich
+  C=3 probe (H7 says aggregate plateaus ~200 tok/s — expect little).
+- Note: Sebastian's message quoted I6 as "next" — I6 was already DONE
+  (commit 726c371); sprint correctly starts at P1/I7-core.
