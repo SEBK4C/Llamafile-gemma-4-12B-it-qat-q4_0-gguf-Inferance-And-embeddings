@@ -1086,3 +1086,34 @@ and deployed. Includes I1b (hardened fixture).
   real_eval keeps `to_16k_mono_wav` anyway (hygiene for arbitrary inputs).
 - **NEXT**: I6 chunker; EM1 (BEIR NFCorpus harness) whenever an embedding
   tick is due; I15 optional sidecar behind I6/I7/I9.
+
+## I6 ✅ (2026-07-05) — chunker: 0 mid-sentence cuts, live self-retrieval 3/3
+- **Deliverable**: `bench/ingest/chunker.py` — enrichment-hint-guided
+  packing: atomic units (md headers / paragraphs / OCR line groups),
+  hint labels that literally match text become hard section boundaries,
+  greedy pack to 512 target / 1024 hard max / 128 runt-merge, CSV keeps
+  the header on every chunk, `doc_summary_text()` builds the hierarchical
+  doc-vector input. Token counts = the LIVE embedder's own `/tokenize`
+  (exact Qwen3), each unit tokenized ONCE, joins budgeted by summed counts
+  (over-estimates → safe direction). `chain_smoke.py` envelope now carries
+  `chunks[]` + doc vector; chunk stage costs 15 ms (total 6.6 s).
+- **F23 (root-caused mid-iteration): silent tokenizer fallback defeats
+  size caps.** First version re-tokenized every join via HTTP (O(n²)
+  calls); intermittent failures silently fell back to chars/4, which
+  UNDER-counts markdown (~3.2 chars/token) → 1053-token chunks sailed past
+  HARD_MAX AND then HTTP-400'd the embedder. Fixes: tokenize-once +
+  summed-join budgeting + a one-time WARN on fallback. Related trap: bullet
+  lists have no regex-visible sentence boundaries ("\n- …") → line-level
+  split fallback for oversized blocks.
+- **Ops change**: embed.service `-c 2048 → -c 4096` (with `-np 2` the old
+  per-slot ctx was 1024 — a 1024-token chunk + BOS/EOS didn't fit and the
+  server rejected the whole batch). Restarted, healthy, verified.
+- **Metrics** (`chunker_bench_20260705.json`): 86 chunks over 4 docs
+  (800-line real markdown ×2, OCR page, CSV); **mid-sentence cuts 0**
+  (honest pairwise metric — a cut is bad iff the sentence continues
+  lowercase across the border); out-of-bounds 1 (a leading 113-token runt
+  forced by a hint boundary — allowed); hinted labels attach ("Findings
+  log", "Experiments log"); **self-retrieval on the LIVE sidecar 3/3**
+  (fact queries hit the containing chunk of RESEARCH_HISTORY top-3).
+- **NEXT**: I7 /v1/ingest worker (chain_smoke → service with sha256
+  idempotency + ledger), then I9 hybrid store (phase gate).

@@ -16,6 +16,7 @@ sys.path.insert(0, HERE)
 from router import route            # noqa: E402
 from ocr import make_engine, extract  # noqa: E402
 from enrich import enrich, semantic_valid  # noqa: E402
+import chunker as chk                 # noqa: E402
 
 
 def embed(base, texts, timeout=120):
@@ -59,19 +60,32 @@ def main():
     ok_enrich = er["parse_error"] is None and semantic_valid(e)
 
     t0 = time.time()
-    vecs = embed(a.embed_base, [e["summary"] if ok_enrich else full_text[:512], full_text[:2000]])
+    chk._TOK_BASE = a.embed_base
+    chunks = chk.chunk_text(full_text, e if ok_enrich else None,
+                            "csv" if r["source_type"] == "csv" else None)
+    lat["chunk_ms"] = round(1000 * (time.time() - t0))
+
+    t0 = time.time()
+    doc_text = chk.doc_summary_text(e) if ok_enrich else full_text[:512]
+    vecs = embed(a.embed_base, [doc_text] + [c["text"] for c in chunks])
     lat["embed_ms"] = round(1000 * (time.time() - t0))
+    for c, v in zip(chunks, vecs[1:]):
+        c["embedding_dims"] = len(v)
+        c.pop("text_full", None)
 
     envelope = {
         "file": r["file"], "source_type": r["source_type"],
         "pages": r["pages"], "text_chars": len(full_text),
-        "enrichment": e, "embedding_dims": len(vecs[0]),
+        "enrichment": e,
+        "chunks": [{k: c[k] for k in ("id", "label", "tokens", "embedding_dims")}
+                    for c in chunks],
+        "doc_embedding_dims": len(vecs[0]),
         "n_vectors": len(vecs), "latency": lat,
         "total_ms": sum(lat.values()),
     }
     print(json.dumps(envelope, indent=1, ensure_ascii=False))
 
-    ok = (ok_enrich and len(vecs[0]) == 1024 and full_text and
+    ok = (ok_enrich and len(vecs[0]) == 1024 and full_text and chunks and
           r["source_type"] is not None)
     print("CHAIN:", "PASS" if ok else "FAIL", "|",
           " ".join(f"{k}={v}" for k, v in lat.items()))
