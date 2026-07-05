@@ -775,10 +775,13 @@ to CT 118 `gemma.service`:
 - **Reversible:** delete the drop-in → `daemon-reload` → restart (reverts to
   the inline excludeReasoning+preEncode ExecStart, backed up).
 - **Repo/publish:** `package/ui-config.json` systemMessage updated to the
-  decline clause (next build bakes it); README + HF model card note the
-  hardened default. The currently-published v0.5.0 binary still bakes the
-  Constitution-only prompt — a rebuild would bake the clause into the
-  downloadable artifact (pending).
+  decline clause; README + HF model card note the hardened default.
+- **Binary rebuilt + published (2026-07-05):** `./scripts/package.sh` repacked
+  the downloadable llamafile with the decline-clause `ui-config.json` (baked
+  `/zip/ui-config.json` verified = 1534 chars, clause present; multi-arch CUDA
+  sm_80/86/89/120 + baked voice preserved). Uploaded to HF via Xet dedup (17 s,
+  only changed chunks). The downloadable artifact now matches the live WebUI
+  default.
 - **H7 ✅ (E13, it.12)** Concurrency characterized — single slot is
   near-serial with ~1.37× overlap, ~200 tok/s ceiling, no errors to C=8.
   docs/concurrency.md published.
