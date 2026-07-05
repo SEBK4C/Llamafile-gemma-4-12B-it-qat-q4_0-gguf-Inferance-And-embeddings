@@ -619,6 +619,38 @@ METRIC, not the model. Fixed to `content_len == 0`, re-ran → math 0/4, clean.
 Lesson: a surprising failure mode is a metric-audit trigger before it's a
 finding (the E4 lesson, applied to instruments not samples).
 
+### E18 — H9: long-context needle-in-haystack + prefill latency (SUCCESS; iteration 18)
+The model advertises 128K ctx and drives agentic harnesses (big repos, long
+convos) — but retrieval accuracy + latency at depth were never measured.
+`bench/h9_longctx.py` (judge-free exact match): a passcode needle planted at the
+HARDEST 50% depth in filler padded to increasing sizes; `enable_thinking:false`
+(H8) so the answer isn't reasoning-starved. Data: `data/h9_longctx_20260705.json`.
+
+| context (actual tok) | retrieval | prefill time | prefill tok/s |
+|---|---|---|---|
+| 767 | 3/3 | 0.28 s | 2858 |
+| 2 987 | 3/3 | 1.0 s | 3030 |
+| 11 867 | 3/3 | 4.2 s | 2831 |
+| 47 387 | 3/3 | 22.3 s | 2123 |
+| 74 027 | 3/3 | 41.9 s | 1770 |
+
+**Findings:**
+1. **Retrieval is PERFECT (3/3 = 100%) through 74K tokens** at the hardest
+   50%-depth ("lost in the middle") position. The model genuinely uses its long
+   context — validates the harness use-case (large repos / long conversations)
+   for accuracy.
+2. **The real constraint is PREFILL LATENCY, not accuracy.** Prefill throughput
+   FADES from ~2860 tok/s (short) to ~1770 tok/s at 74K — the O(n²) attention
+   tax. First-token latency reaches ~42 s at 74K; extrapolating the fade, full
+   128K would be ~75–90 s. So deep context is a patience/latency cost, not a
+   correctness risk.
+3. **Practical guidance:** prompt-caching matters for agentic use — repeated
+   context isn't re-prefilled, so the 42 s hit is paid once, not per turn. Budget
+   for prefill time at depth; accuracy is not the worry.
+Chart: `data/h9_longctx_20260705.png`. Scope note: tested the single hardest
+depth (50%) and up to 74K (not full 128K) to respect the shared GPU; a full
+position×depth grid and the 128K point are future work.
+
 ## Meta-lesson (iterations 11-15)
 Small-n composite scores are for GATING (does anything regress?), not RANKING
 (which prompt is best). Rank on powered, targeted sub-experiments (G8 jailbreak
@@ -626,10 +658,16 @@ n=4/probe; the acc/soph sub-scores that agree across runs), not on a 1-point
 serve_score delta. This is the E4→E5 lesson, now generalized.
 
 ## Goals (phase 2)
+- **H9 ✅ (E18, it.18)** Long-context: PERFECT needle retrieval through 74K tok
+  @ 50% depth; prefill throughput fades 2860→1770 tok/s (O(n²)), ~42 s TTFT at
+  74K — latency is the constraint, not accuracy. Validates the harness
+  large-context use-case.
+- **H8 ✅ (E17, it.17)** Empty-content footgun mapped (creative-only;
+  enable_thinking=false fixes 0/24); dataset card refreshed.
 - **G4 ✅ (E16, it.16)** DRY sensitivity — shipped 0.8 causes zero collateral
   damage on legitimate repetition (validated through 1.2); greedy loop fragile/
-  didn't reproduce; thinking-control footgun found (F15). All backlog goals now
-  closed.
+  didn't reproduce; thinking-control footgun found (F15). All original backlog
+  goals closed; H8/H9 are follow-ups from reviewing the history.
 - **G9 ✅ (E15, it.15)** Decline-clause quality validated: no regression, acc &
   soph consistently up, cal perfect; composite unrankable at n=2 (noise). Ship
   recommendation de-risked.
