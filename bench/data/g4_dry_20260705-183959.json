@@ -1,0 +1,107 @@
+{
+ "suite": "g4_dry",
+ "reps": 3,
+ "test_A": {
+  "0.0": {
+   "loop_rate": 0.0,
+   "looped": 0,
+   "n": 3
+  },
+  "0.4": {
+   "loop_rate": 0.0,
+   "looped": 0,
+   "n": 3
+  },
+  "0.8": {
+   "loop_rate": 0.0,
+   "looped": 0,
+   "n": 3
+  },
+  "1.2": {
+   "loop_rate": 0.0,
+   "looped": 0,
+   "n": 3
+  }
+ },
+ "test_B": {
+  "0.0": {
+   "refrain": {
+    "pass_rate": 1.0,
+    "passes": 3,
+    "n": 3
+   },
+   "times_table": {
+    "pass_rate": 1.0,
+    "passes": 3,
+    "n": 3
+   },
+   "count_list": {
+    "pass_rate": 1.0,
+    "passes": 3,
+    "n": 3
+   },
+   "accumulator": {
+    "pass_rate": 1.0,
+    "passes": 3,
+    "n": 3
+   },
+   "_total": {
+    "passes": 12,
+    "n": 12
+   }
+  },
+  "0.8": {
+   "refrain": {
+    "pass_rate": 1.0,
+    "passes": 3,
+    "n": 3
+   },
+   "times_table": {
+    "pass_rate": 1.0,
+    "passes": 3,
+    "n": 3
+   },
+   "count_list": {
+    "pass_rate": 1.0,
+    "passes": 3,
+    "n": 3
+   },
+   "accumulator": {
+    "pass_rate": 1.0,
+    "passes": 3,
+    "n": 3
+   },
+   "_total": {
+    "passes": 12,
+    "n": 12
+   }
+  },
+  "1.2": {
+   "refrain": {
+    "pass_rate": 1.0,
+    "passes": 3,
+    "n": 3
+   },
+   "times_table": {
+    "pass_rate": 1.0,
+    "passes": 3,
+    "n": 3
+   },
+   "count_list": {
+    "pass_rate": 1.0,
+    "passes": 3,
+    "n": 3
+   },
+   "accumulator": {
+    "pass_rate": 1.0,
+    "passes": 3,
+    "n": 3
+   },
+   "_total": {
+    "passes": 12,
+    "n": 12
+   }
+  }
+ },
+ "stamp": "20260705-183959"
+}

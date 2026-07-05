@@ -540,6 +540,49 @@ Ran the decline candidate TWICE (transparency, not cherry-pick).
 Chart: `data/g9_composite_20260705.png` (per-run dots show the variance
 honestly). Generator `chart_g9.py`.
 
+### F15 — Thinking-control on this server (iteration 16)
+Building G4 hit the empty-content trap (F3) hard: on a constrained-CREATIVE
+prompt (4-stanza poem with a fixed refrain), Gemma-4's `reasoning_content` grows
+UNBOUNDED and `content` stays empty even at max_tokens 2400 (reasoning 2614 →
+5493 → 8622 chars, content 0). Fixes tested live:
+- `reasoning_effort: "low"` / `"none"` → **IGNORED** (still 2200+ reasoning chars,
+  empty content).
+- `chat_template_kwargs: {"enable_thinking": false}` → **WORKS** (reasoning 0,
+  content 619, refrain ×4). This is the reliable knob to disable thinking.
+Practical: any harness seeing empty responses on this model should set
+`enable_thinking:false` (or budget FAR past reasoning); a small max_tokens is
+not the only cause — some prompts never stop reasoning.
+
+### E16 — G4 DRY sensitivity: collateral damage + loop suppression (SUCCESS, null result; iteration 16)
+Reframed from the history: E2/E3 already showed loops are greedy-only and the
+shipped sampler is temp 1.0, so DRY isn't load-bearing for loop prevention at the
+serving default. The question that matters is the INVERSE: does shipped DRY 0.8
+DAMAGE legitimate repetition? Judge-free, programmatic checks.
+`bench/ab_dry.py`. Data: `data/g4_dry_20260705.json`.
+
+**Test B — collateral damage (temp 1.0, thinking off, 3 reps):**
+| prompt | DRY 0.0 | DRY 0.8 (shipped) | DRY 1.2 |
+|---|---|---|---|
+| poem refrain (×4) | 3/3 | 3/3 | 3/3 |
+| 7× table (12 rows) | 3/3 | 3/3 | 3/3 |
+| count 1–20 | 3/3 | 3/3 | 3/3 |
+| accumulator loop | 3/3 | 3/3 | 3/3 |
+
+**Decisive: DRY causes ZERO collateral damage** — legitimate repetition
+(refrains, tables, counts, accumulator code) is preserved 100% at the shipped
+0.8 AND at 1.2. DRY's `dry_allowed_length: 2` + the model's strong prior for
+instructed repetition mean it suppresses degenerate loops without touching
+wanted repeats. **The shipped DRY 0.8 is validated: free insurance, real
+headroom.**
+
+**Test A — greedy loop (temp 0, thinking on):** 0 loops at EVERY dry incl. 0.0
+(0/3 each). The E2 loop did NOT reproduce with this 12-qualities prompt. Honest
+read: the greedy loop is REAL but FRAGILE and PROMPT-SPECIFIC (consistent with
+E1's 0/12 and E3's sharp cliff) — not reliably triggerable. So Test A is
+inconclusive as a DRY-floor measurement (no loop to suppress); DRY's loop
+backstop rests on the E2 reproduction, and since Test B shows it costs nothing,
+keeping it on is correct regardless. NOT a DRY failure — a property of the loop.
+
 ## Meta-lesson (iterations 11-15)
 Small-n composite scores are for GATING (does anything regress?), not RANKING
 (which prompt is best). Rank on powered, targeted sub-experiments (G8 jailbreak
@@ -547,6 +590,10 @@ n=4/probe; the acc/soph sub-scores that agree across runs), not on a 1-point
 serve_score delta. This is the E4→E5 lesson, now generalized.
 
 ## Goals (phase 2)
+- **G4 ✅ (E16, it.16)** DRY sensitivity — shipped 0.8 causes zero collateral
+  damage on legitimate repetition (validated through 1.2); greedy loop fragile/
+  didn't reproduce; thinking-control footgun found (F15). All backlog goals now
+  closed.
 - **G9 ✅ (E15, it.15)** Decline-clause quality validated: no regression, acc &
   soph consistently up, cal perfect; composite unrankable at n=2 (noise). Ship
   recommendation de-risked.
