@@ -357,11 +357,37 @@ calling (OpenCode)**. OpenCode ran the same tasks slightly faster (leaner
 system prompt). Doc shipped: `docs/integrations/opencode.md`. Data appended to
 `data/harness_e2e_20260705.json`; chart regenerated.
 
+### F12 — One binary, many models: the llamafile is a general llama.cpp server (iteration 9)
+`-m <external.gguf>` overrides the baked model (trailing `...` in .args), so
+the SAME APE serves any GGUF. Required overrides when the external model isn't
+the tuned Gemma: `--no-mmproj --spec-type none -ngl 0 -sm layer -ctk f16 -ctv
+f16` (baked flags are 3080Ti/Gemma-specific — mmproj + MTP draft + q8 KV would
+break a bert-arch model). Deployed as `embed.service` on CT 118 :8081
+(nomic-embed-text-v1.5 Q8, CPU, ~0.02s/req, zero VRAM); tailnet path-mount
+`/embed` → SDKs use base_url `.../embed/v1`. gemma.service untouched (verified
+both active).
+
+### E10 — Embedding sidecar semantics + Responses streaming (SUCCESS ×2; iteration 9)
+1. **Embeddings fixed by sidecar.** Same 3 probe pairs, same host:
+   - 12B main endpoint margins (related−unrelated): **−0.010, +0.020, −0.035**
+     (2 of 3 INVERTED — F9 confirmed at sentence level, not just word level).
+   - nomic sidecar margins: **+0.463, +0.410, +0.538** — clean separation,
+     768d, 146 MB, CPU. SEMANTIC SANITY: PASS.
+   - `api_probe.py` grew `--embed-base`; run with it: embeddings_sidecar ✅
+     (main-endpoint FAIL stays in the report by design — it reflects reality).
+   - Chart: `data/embeddings_compare_20260705.png`; doc: `docs/embeddings.md`.
+2. **/v1/responses streaming verified** (H5's last gap): full event grammar —
+   response.created / in_progress / output_item.added / 28×reasoning_text.delta /
+   14×output_text.delta / content_part.done / output_item.done / completed.
+
 ## Goals (phase 2)
 - **H1 ✅ (E7)** Endpoint inventory + published one-command probe suite.
 - **H2 — Harness e2e in LXC.** ✅ **Claude Code (E8, it.7)**, ✅ **OpenCode (E9,
   it.8)** — remaining: Cline/Kilo (OpenAI-compat, VS Code — headless-config
   verification only), OpenClaw; reusing CT 130. Docs ship only after e2e passes.
+- **H3 ✅ (E10)** Embeddings that work — nomic sidecar deployed + documented;
+  multi-model pattern proven (F12).
+- **H5 ✅ (E9a + E10.2)** OpenAI tools + Responses streaming both verified.
 - **H3 — Embeddings that work.** Pooling flags vs dedicated
   EmbeddingGemma/nomic GGUF sidecar; benchmark vs F9 triplet + small STS set.
 - **H4 — Integration docs** (`docs/integrations/*.md`) adapted from

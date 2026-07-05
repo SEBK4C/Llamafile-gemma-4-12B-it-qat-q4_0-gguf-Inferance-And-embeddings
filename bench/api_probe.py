@@ -81,8 +81,9 @@ def cosine(a, b):
 # ---------------------------------------------------------------- probe suite
 
 class Suite:
-    def __init__(self, base, max_tokens):
+    def __init__(self, base, max_tokens, embed_base=None):
         self.base, self.max_tokens = base, max_tokens
+        self.embed_base = embed_base
         self.results, self.props = [], {}
         self.tts_wav = None
 
@@ -238,6 +239,25 @@ class Suite:
                  f"dims={len(vecs[0])} cos(cat,kitten)={sim_kk:.3f} > cos(cat,spreadsheet)={sim_ks:.3f} -> semantic sanity",
                  dims=len(vecs[0]), cos_close=round(sim_kk, 4), cos_far=round(sim_ks, 4))
 
+    def t_embeddings_sidecar(self):
+        """Optional dedicated embedding server (see docs/embeddings.md)."""
+        if not self.embed_base:
+            return self.rec("embeddings_sidecar", "POST <embed-base>/v1/embeddings", None, None,
+                            "no --embed-base given — skipped (run a dedicated embedder; the main model's embeddings are not semantic)")
+        r = http(self.embed_base, "/v1/embeddings", "POST",
+                 {"input": ["cat", "kitten", "spreadsheet"], "model": "embed"}, timeout=60)
+        b = jbody(r)
+        data = b.get("data", [])
+        if r["code"] != 200 or len(data) != 3:
+            return self.rec("embeddings_sidecar", "POST <embed-base>/v1/embeddings", False, r["wall"], jbody(r))
+        vecs = [d["embedding"] for d in data]
+        if isinstance(vecs[0][0], list):
+            vecs = [[sum(col) / len(col) for col in zip(*v)] for v in vecs]
+        sim_kk, sim_ks = cosine(vecs[0], vecs[1]), cosine(vecs[0], vecs[2])
+        self.rec("embeddings_sidecar", "POST <embed-base>/v1/embeddings", sim_kk > sim_ks, r["wall"],
+                 f"dims={len(vecs[0])} cos(cat,kitten)={sim_kk:.3f} > cos(cat,spreadsheet)={sim_ks:.3f}",
+                 dims=len(vecs[0]), cos_close=round(sim_kk, 4), cos_far=round(sim_ks, 4))
+
     # --- multimodal
     def t_vision(self):
         if not self.props.get("modalities", {}).get("vision"):
@@ -296,7 +316,7 @@ class Suite:
         for t in [self.t_health, self.t_props, self.t_models, self.t_tokenize,
                   self.t_chat, self.t_chat_stream, self.t_completions_v1, self.t_completion_native,
                   self.t_messages, self.t_messages_stream, self.t_count_tokens, self.t_responses,
-                  self.t_embeddings]:
+                  self.t_embeddings, self.t_embeddings_sidecar]:
             t()
         if not quick:
             self.t_vision(); self.t_tts(); self.t_audio_in()
@@ -311,10 +331,12 @@ def main():
     ap.add_argument("--quick", action="store_true", help="skip vision/TTS/audio tests")
     ap.add_argument("--max-tokens", type=int, default=600,
                     help="per-request budget (Gemma 4 spends tokens on hidden reasoning first — keep >=400)")
+    ap.add_argument("--embed-base", default=None,
+                    help="base URL of a dedicated embedding server (e.g. http://127.0.0.1:8081); see docs/embeddings.md")
     args = ap.parse_args()
 
     print(f"# api_probe — target {args.base}\n")
-    s = Suite(args.base, args.max_tokens)
+    s = Suite(args.base, args.max_tokens, embed_base=args.embed_base)
     t0 = time.time()
     results = s.run(quick=args.quick)
     total = time.time() - t0
