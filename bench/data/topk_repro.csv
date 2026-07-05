@@ -1,0 +1,9 @@
+top_k,dry,rep,looped,tok_s,n_out,loop_reason
+1,off,0,1,143.9,1500,line x3: '10. Empathetic'
+1,off,1,1,144.8,1500,line x3: '10. Empathetic'
+1,on,0,0,131.1,1500,
+1,on,1,0,130.6,1500,
+64,off,0,1,143.0,1500,line x3: '10. Empathetic'
+64,off,1,1,142.2,1500,line x3: '10. Empathetic'
+64,on,0,0,129.8,1500,
+64,on,1,0,129.4,1500,
