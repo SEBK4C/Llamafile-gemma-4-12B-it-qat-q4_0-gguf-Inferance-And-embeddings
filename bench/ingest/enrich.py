@@ -58,6 +58,23 @@ ENRICH_SCHEMA = {
     "additionalProperties": False,
 }
 
+# P2 lean variant — REJECTED as default (2026-07-06, see RESEARCH_HISTORY
+# P2): per-call it saves ~22% output tokens at identical tok/s, but on
+# noisy real scans (FUNSD) the tighter grammar has a RUNAWAY mode — the
+# model paints itself into an endless JSON string that DRY cannot break
+# (novel-token continuation, not repetition) and burns max_tokens,
+# stalling a GPU slot. v1 has never run away. Kept for reference and for
+# non-speculative backends; enable per-call with lean=True or ENRICH_LEAN=1.
+import copy as _copy
+ENRICH_SCHEMA_LEAN = _copy.deepcopy(ENRICH_SCHEMA)
+ENRICH_SCHEMA_LEAN["properties"]["summary"]["maxLength"] = 300
+ENRICH_SCHEMA_LEAN["properties"]["chart_reading"]["maxLength"] = 300
+ENRICH_SCHEMA_LEAN["properties"]["scene"]["maxLength"] = 200
+ENRICH_SCHEMA_LEAN["properties"]["entities"]["maxItems"] = 10
+ENRICH_SCHEMA_LEAN["properties"]["chunking_hints"]["items"] = {
+    "type": "object", "properties": {"label": {"type": "string", "maxLength": 60}},
+    "required": ["label"], "additionalProperties": False}
+
 # Byte-identical across ALL documents (H10 prompt cache).
 SYSTEM_PREFIX = """You are the enrichment stage of a document-ingest pipeline. You receive one document as (a) optional image and (b) extracted text plus file metadata. Produce ONE JSON object describing it for retrieval indexing.
 
@@ -74,7 +91,7 @@ Rules:
 Answer with the JSON object only."""
 
 
-def build_request(text, file_meta, png_bytes=None, max_tokens=1200):
+def build_request(text, file_meta, png_bytes=None, max_tokens=1200, lean=False):
     user_content = []
     if png_bytes is not None:
         user_content.append({"type": "image_url", "image_url": {
@@ -86,9 +103,15 @@ def build_request(text, file_meta, png_bytes=None, max_tokens=1200):
     return {
         "max_tokens": max_tokens,
         "temperature": 0,
+        # F24: greedy + grammar can loop INSIDE an unbounded JSON string
+        # (GBNF ignores maxLength) — E2-validated DRY prevents it at zero
+        # quality cost (G4); temp stays 0 for deterministic benches.
+        "dry_multiplier": 0.8, "dry_base": 1.75,
+        "dry_allowed_length": 2, "dry_penalty_last_n": -1,
         "cache_prompt": True,
         "chat_template_kwargs": {"enable_thinking": False},
-        "response_format": {"type": "json_object", "schema": ENRICH_SCHEMA},
+        "response_format": {"type": "json_object",
+                             "schema": ENRICH_SCHEMA_LEAN if lean else ENRICH_SCHEMA},
         "messages": [
             {"role": "system", "content": SYSTEM_PREFIX},
             {"role": "user", "content": user_content},
@@ -96,8 +119,10 @@ def build_request(text, file_meta, png_bytes=None, max_tokens=1200):
     }
 
 
-def enrich(base, text, file_meta, png_bytes=None, timeout=600):
-    body = json.dumps(build_request(text, file_meta, png_bytes)).encode()
+def enrich(base, text, file_meta, png_bytes=None, timeout=600, lean=None):
+    if lean is None:
+        lean = os.environ.get("ENRICH_LEAN", "") == "1"
+    body = json.dumps(build_request(text, file_meta, png_bytes, lean=lean)).encode()
     req = urllib.request.Request(base.rstrip("/") + "/v1/chat/completions", data=body,
                                  headers={"Content-Type": "application/json"})
     t0 = time.time()

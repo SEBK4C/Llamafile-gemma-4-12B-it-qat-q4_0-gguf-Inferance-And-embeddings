@@ -1148,3 +1148,29 @@ Program section: bench/phase3-ingest-program.md § P-SPRINT.
   C=3 probe (H7 says aggregate plateaus ~200 tok/s — expect little).
 - Note: Sebastian's message quoted I6 as "next" — I6 was already DONE
   (commit 726c371); sprint correctly starts at P1/I7-core.
+
+## P2 ✅ (2026-07-06) — enrichment budget: SHIP v1+DRY; lean REJECTED; F24
+- **F24 (new failure class): greedy + grammar can loop INSIDE an unbounded
+  JSON string.** The GBNF converter does not enforce maxLength, so a
+  string, once open, admits any continuation; at temp 0 the E2/E3 loop
+  reappears *within* it (first seen: lean battery receipt — 1200 tokens,
+  "Unterminated string"). E2-validated DRY fixes the repetition form —
+  battery back to 6/6 — at **−6% batch throughput** (18.77 → 17.58
+  docs/min, enrich busy +8%). Shipped in `build_request` (G4: DRY has no
+  quality collateral).
+- **Lean schema (tighter maxLengths, label-only chunking_hints, entities
+  ≤10): REJECTED as default.** Per-call it is strictly better — 294 vs
+  373 tokens at an IDENTICAL 114 tok/s (single-call probe refuted my MTP-
+  acceptance hypothesis) — but the 22-file batch scored **12.86 docs/min**
+  because one FUNSD scan hit a **43.5 s novel-token runaway** (enrich_ok
+  false, ~empty output) that DRY cannot break (gibberish continuation is
+  not repetition) and STALLED one of two GPU slots, queueing the batch
+  behind it. v1 has never run away in any battery or batch. Lesson:
+  **judge grammar/schema changes on noisy REAL scans, not clean fixtures —
+  and a pipeline's worst-case call, not its mean, sets batch throughput.**
+- **Measurement note**: envelope `wall_s` includes stage-semaphore WAIT
+  (queueing), which is how one runaway inflated flickr docs to ~39 s
+  "wall" — read stage_busy for compute, wall for latency-experienced.
+- **Shipped config**: v1 schema + DRY, pipeline C=2 → **17.58 docs/min**.
+  Gate: tick 1 of 2 without ≥5% improvement. NEXT: P3 (OCR tier/threads —
+  second-largest stage), then P4 embed path.
