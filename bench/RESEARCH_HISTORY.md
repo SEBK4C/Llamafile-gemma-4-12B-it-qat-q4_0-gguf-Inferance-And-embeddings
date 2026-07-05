@@ -435,7 +435,42 @@ Also this iteration: **HF model card refreshed** (model repo commit 68829fd) —
 agent endpoints table, embeddings warning, one-command test, integrations
 table with the expectations warning.
 
+### F14 — "One slot" ≠ strictly serial (iteration 12)
+The caveat repeated in every integration doc ("one request at a time, parallel
+agents queue") was UNMEASURED. Tested it: `total_slots:1` confirmed, but the
+server is not strictly serial. New `bench/concurrency_probe.py` (stdlib; C
+identical 128-token `ignore_eos` requests, best-of-2, measures batch wall +
+per-request latency + aggregate tok/s).
+
+### E13 — Concurrency characterization (SUCCESS; iteration 12)
+| C | batch_s | median req | aggregate tok/s | per-req tok/s | vs pure-serial |
+|---:|---:|---:|---:|---:|---:|
+| 1 | 0.88 | 0.88 | 145 | 145 | 1.00× |
+| 2 | 1.29 | 1.00 | 199 | 128 | 1.37× |
+| 4 | 2.56 | 1.54 | 200 | 82 | 1.38× |
+| 8 | 5.53 | 3.15 | 185 | 41 | 1.27× |
+
+**Findings:**
+1. NOT strictly serial: 2-4 concurrent requests finish ~1.37× faster than
+   back-to-back (real prefill/decode overlap). But it does NOT scale — the
+   aggregate rate PLATEAUS at ~200 tok/s (the whole-server ceiling), reached
+   by C=2.
+2. Per-request throughput DECAYS cleanly 145→41 tok/s (C=1→8); the slowest
+   request's latency grows near-linearly. Classic batched-inference
+   throughput-vs-latency tradeoff.
+3. **Zero errors/drops through C=8** — surplus requests queue and wait, they
+   don't fail. So multiple harnesses CAN safely share one server.
+4. Practical guidance (docs/concurrency.md): 2 agents = fine (~30% per-req
+   slowdown); 4+ = capped throughput + degraded latency; budget ~200 tok/s
+   total, not ×clients. Genuine parallelism needs `-np N` + more KV (untested;
+   prod restart; 12 GB KV is the limit).
+Chart: `data/concurrency_20260705.png`; probe: `bench/concurrency_probe.py`.
+This CORRECTS the integration docs' oversimplified "queue" caveat with numbers.
+
 ## Goals (phase 2)
+- **H7 ✅ (E13, it.12)** Concurrency characterized — single slot is
+  near-serial with ~1.37× overlap, ~200 tok/s ceiling, no errors to C=8.
+  docs/concurrency.md published.
 - **G1 ✅ (E12, it.11)** Frozen full-battery baseline seeded for both
   candidates; ledger is now the reference for future serving experiments.
 - **H1 ✅ (E7)** Endpoint inventory + published one-command probe suite.
