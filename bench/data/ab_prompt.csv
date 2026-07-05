@@ -1,0 +1,3 @@
+ts	agent_id	acc	hum	soph	cal	rep	tok_s	serve_score	gates	status	hypothesis
+1783243228	ab-constitution	1.0	3.25	4.0	0.75	0.0	100.3	74.0	-	baseline	Gemma-4 official sampler recipe (temp1/top_k64/top_p0.95, repeat OFF) + DRY anti-loop insurance; system prompt = cut-down Claude Constitution (honest, calibrated, direct, non-sycophantic, capable-adult, not-over-cautious)
+1783243306	ab-bare	1.0	3.12	4.38	1.0	0.0	107.3	76.6	-	baseline	bare 'helpful assistant' prompt — A/B control vs the distilled Constitution prompt; same sampler

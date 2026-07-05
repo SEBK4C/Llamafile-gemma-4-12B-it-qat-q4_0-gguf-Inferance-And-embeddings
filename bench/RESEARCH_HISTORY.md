@@ -102,6 +102,32 @@ Data: `data/temp_isolate.csv`.
    belt-and-suspenders. **The one dangerous config is temp 0 — never serve greedy.**
    (Exact threshold between 0 and 0.3 untested; practically irrelevant.)
 
+### E4 — A/B: distilled Constitution prompt vs bare prompt (SURPRISE — no advantage, preliminary)
+Same official sampler; 4 probes (1/category: qa_boil, fp_einstein, sa_chem,
+sd_kitty), 2 replicas, max_tokens 1536, GLM-5.2 judge. Data: `data/ab_prompt.csv`.
+
+| dimension | Constitution | bare "helpful assistant" |
+|---|---|---|
+| acc | 1.00 | 1.00 |
+| hum (1-5) | 3.25 | 3.12 |
+| soph (1-5) | 4.00 | **4.38** |
+| cal (0-1) | 0.75 | **1.00** |
+| serve_score | 74.0 | **76.6** |
+
+**Finding (honest, preliminary):** the distilled Constitution prompt did NOT
+outperform a bare prompt on this small battery — marginally WORSE on calibration
+(0.75 vs 1.00) and sophistication (4.00 vs 4.38), tied on accuracy, slightly
+ahead on humanness. Net serve_score favored the bare prompt (76.6 vs 74.0).
+- **Caveat: tiny sample** (n=2 replicas × 1 probe/category = 4 points/dimension)
+  + GLM-judge noise; gaps are within plausible noise. NOT conclusive.
+- The cal gap is consistent with the flagged tradeoff: the "not over-cautious /
+  capable adult" framing may decline jailbreaks slightly less reliably. Needs a
+  per-probe breakdown to see if sd_kitty (jailbreak) or sa_chem (over-refusal)
+  slipped.
+- **Implication:** the Constitution prompt is NOT yet validated as an improvement.
+  Do not deploy it as the WebUI default on this evidence — reinforces the earlier
+  "present as candidate, don't ship" call.
+
 ---
 
 ## Proposed research goals (next iterations)
@@ -112,9 +138,13 @@ Data: `data/temp_isolate.csv`.
 - **G2 — Isolate temp vs length.** ✅ RESOLVED (E3): temperature gates loop
   OCCURRENCE (only greedy/temp-0 loops; temp ≥ 0.3 never does); length gates
   MANIFESTATION (~1500 tokens to reach the loop point).
-- **G3 — A/B the Constitution prompt** vs bare/no-prompt on the full battery
-  (hum/soph/cal deltas) — does the distilled prompt measurably improve serving
-  quality without loosening the decline gate?
+- **G3 — A/B the Constitution prompt** vs bare/no-prompt. ⚠️ ATTEMPTED (E4),
+  INCONCLUSIVE: no advantage on n=2 (possibly slight cal/soph regression). Needs
+  a higher-powered rerun before any verdict.
+- **G6 — Higher-powered prompt A/B (from E4).** Repeat E4 with ≥5 replicas and
+  ≥2 probes/category, and instrument per-probe disposition, to decide if the
+  cal/soph gap is real signal or judge noise. This is the gate on whether the
+  Constitution prompt ships.
 - **G4 — DRY parameter sensitivity.** dry_multiplier {0.4, 0.8, 1.2} × allowed_length
   {2, 4} — find the gentlest DRY that still kills loops without harming acc.
 - **G5 — Publish cadence.** Charts + CSVs to GitHub + HF dataset repo each iteration.

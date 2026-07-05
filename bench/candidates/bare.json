@@ -1,0 +1,6 @@
+{
+  "axis": "ab-bare-control",
+  "hypothesis": "bare 'helpful assistant' prompt — A/B control vs the distilled Constitution prompt; same sampler",
+  "system_prompt": "You are a helpful assistant.",
+  "sampler": {"temperature":1.0,"top_k":64,"top_p":0.95,"min_p":0.01,"dry_multiplier":0.8,"dry_base":1.75,"dry_allowed_length":2,"dry_penalty_last_n":-1,"repeat_penalty":1.0}
+}
