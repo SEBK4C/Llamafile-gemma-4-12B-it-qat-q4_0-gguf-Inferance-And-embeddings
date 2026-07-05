@@ -1,0 +1,117 @@
+diff --git a/llamafile/BUILD.mk b/llamafile/BUILD.mk
+index 6d4cbcb..b36e03c 100644
+--- a/llamafile/BUILD.mk
++++ b/llamafile/BUILD.mk
+@@ -125,6 +125,7 @@ LLAMAFILE_SRCS_C := \
+ 	llamafile/llamafile.c \
+ 	llamafile/metal.c \
+ 	llamafile/voice.c \
++	llamafile/embed.c \
+ 	llamafile/vulkan.c \
+ 	llamafile/zip.c
+ 
+diff --git a/llamafile/embed.c b/llamafile/embed.c
+new file mode 100644
+index 0000000..b50e21b
+--- /dev/null
++++ b/llamafile/embed.c
+@@ -0,0 +1,99 @@
++// -*- mode:c;indent-tabs-mode:nil;c-basic-offset:4;coding:utf-8 -*-
++// vi: set et ft=c ts=4 sts=4 sw=4 fenc=utf-8 :vi
++#define _COSMO_SOURCE // makedirs()
++//
++// Baked-in embeddings (v0.6.0): if the zip carries an embedding GGUF,
++// extract it and re-spawn THIS SAME APE as a dedicated embedding server on
++// a loopback port (the 12B's own /v1/embeddings is anisotropic — see
++// docs/embeddings.md). The main server reverse-proxies it at /embed/*
++// (server-http.cpp), so /embed/v1/embeddings, /embed/health and
++// /embed/tokenize work out of the box — the same paths the phase-3 ingest
++// pipeline and docs already use.
++//
++// Config matches the validated CT 118 sidecar (RESEARCH_HISTORY I13/I6):
++// Qwen3-Embedding needs --pooling last (fork patch 0019), -c 4096 so a
++// 1024-token chunk fits a slot at -np 2, CPU-only (-ngl 0) — the GPU
++// belongs to chat + enrichment.
++//
++// Guards: child runs with LLAMAFILE_NO_EMBED=1 (no recursion) and
++// LLAMAFILE_NO_VOICE=1 (F17: the sidecar must not fight the main server's
++// baked voice for its ports). Opt-out: LLAMAFILE_NO_EMBED=1.
++
++#include "llamafile.h"
++
++#include <errno.h>
++#include <limits.h>
++#include <signal.h>
++#include <spawn.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include <sys/stat.h>
++#include <unistd.h>
++
++#define EMBED_ZIP_GGUF "/zip/embed-model.gguf"
++#define EMBED_PORT "8081"
++
++static pid_t g_embed_pid = -1;
++
++static void embed_kill(void) {
++    if (g_embed_pid > 0) {
++        kill(-g_embed_pid, SIGTERM);
++    }
++}
++
++// Returns the loopback port the embedding server listens on, or 0 if no
++// embedding payload is present / spawn failed. Idempotent.
++int llamafile_embed_start(void) {
++    static int port = -1;
++    if (port != -1)
++        return port;
++    port = 0;
++    if (getenv("LLAMAFILE_NO_EMBED"))
++        return port;
++    struct stat st;
++    if (stat(EMBED_ZIP_GGUF, &st))
++        return port; // no baked embedder in this build
++    char app[PATH_MAX], gguf[PATH_MAX];
++    llamafile_get_app_dir(app, sizeof(app));
++    if (makedirs(app, 0755)) {
++        fprintf(stderr, "embed: could not create %s\n", app);
++        return port;
++    }
++    snprintf(gguf, sizeof(gguf), "%sembed-model.gguf", app);
++    if (!llamafile_extract(EMBED_ZIP_GGUF, gguf)) {
++        fprintf(stderr, "embed: failed to extract baked embedding model\n");
++        return port;
++    }
++    // Re-exec ourselves as the embedding server under a 2s respawn loop in
++    // its own process group (same supervision pattern as voice.c). stdout/
++    // stderr silenced — the child's startup log would interleave with ours.
++    const char *self = GetProgramExecutableName();
++    char cmd[768];
++    snprintf(cmd, sizeof(cmd),
++             "while :; do LLAMAFILE_NO_EMBED=1 LLAMAFILE_NO_VOICE=1 "
++             "/bin/sh \"$1\" --server -m \"$2\" --embeddings --pooling last "
++             "--host 127.0.0.1 --port %s -ngl 0 --spec-type none --no-mmproj "
++             "-c 4096 -ub 512 -np 2 --threads 4 >/dev/null 2>&1; sleep 2; done",
++             EMBED_PORT);
++    char *argv[] = {"/bin/sh", "-c", cmd, "g4embed", (char *)self, gguf, (char *)0};
++    extern char **environ;
++    pid_t pid;
++    posix_spawnattr_t attr;
++    posix_spawnattr_init(&attr);
++    posix_spawnattr_setflags(&attr, POSIX_SPAWN_SETPGROUP);
++    posix_spawnattr_setpgroup(&attr, 0);
++    int err = posix_spawn(&pid, "/bin/sh", 0, &attr, argv, environ);
++    posix_spawnattr_destroy(&attr);
++    if (err) {
++        fprintf(stderr, "embed: failed to spawn embedding server: %s\n", strerror(err));
++        return port;
++    }
++    g_embed_pid = pid;
++    atexit(embed_kill);
++    port = atoi(EMBED_PORT);
++    fprintf(stderr, "embed: baked embedding server (Qwen3-Embedding-0.6B) starting on "
++                    "127.0.0.1:%d — proxied at /embed/v1/* "
++                    "(LLAMAFILE_NO_EMBED=1 disables)\n", port);
++    return port;
++}
