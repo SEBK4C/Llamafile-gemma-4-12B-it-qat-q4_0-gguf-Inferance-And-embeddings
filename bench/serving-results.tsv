@@ -1,1 +1,3 @@
 ts	agent_id	acc	hum	soph	cal	rep	tok_s	serve_score	gates	status	hypothesis
+1783258880	loop-it11	0.8	2.64	3.64	0.875	0.091	96.0	65.2	-	baseline	bare 'helpful assistant' prompt — A/B control vs the distilled Constitution prompt; same sampler
+1783259464	loop-it11	0.8	2.86	3.64	1.0	0.091	89.2	66.1	-	keep	Gemma-4 official sampler recipe (temp1/top_k64/top_p0.95, repeat OFF) + DRY anti-loop insurance; system prompt = cut-down Claude Constitution (honest, calibrated, direct, non-sycophantic, capable-adult, not-over-cautious)

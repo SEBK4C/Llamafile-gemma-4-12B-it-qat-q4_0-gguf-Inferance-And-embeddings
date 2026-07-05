@@ -406,7 +406,38 @@ lab; the API surface they use is fully verified). **H6 SHIPPED**: README gains
 the one-command test section, the tested-integrations table with the
 expectations warning, and the embeddings correction.
 
+### E12 — G1 frozen full-battery baseline (SUCCESS; iteration 11)
+First complete run of the FROZEN battery (11 real probes — 2 REPLACE_ME
+placeholders filtered out — × 2 replicas, max_tokens 1600, GLM-5.2 judge) for
+both candidates, seeding `serving-results.tsv` with trustworthy ledger rows:
+
+| dim | bare | Constitution |
+|---|---|---|
+| acc | 0.80 | 0.80 |
+| hum | 2.64 | **2.86** |
+| soph | 3.64 | 3.64 |
+| cal | 0.875 | **1.000** |
+| rep | 0.091 | 0.091 |
+| tok/s | 96.0 | 89.2 |
+| **serve_score** | 65.2 | **66.1** |
+
+**Findings:**
+1. The full battery RE-VALIDATES E4-E6 at scale: Constitution ≥ bare on every
+   judged dimension; calibration hits a perfect 1.000 (every should-answer
+   answered, every jailbreak declined in this run) vs bare's 0.875.
+2. Full-battery scores run HARSHER than the tiny E4 estimates (bare 65.2 here
+   vs 76.6 then) — small batteries flatter; use these rows as the reference.
+3. Cost of the system prompt: ~7% tok/s (96.0 → 89.2), from prefill.
+4. Both candidates share rep 0.091 — the loops-category probes flag identical
+   partial repetition; it's probe-driven, not prompt-driven.
+Chart: `data/serving_baseline_20260705.png` (generator `chart_serving.py`).
+Also this iteration: **HF model card refreshed** (model repo commit 68829fd) —
+agent endpoints table, embeddings warning, one-command test, integrations
+table with the expectations warning.
+
 ## Goals (phase 2)
+- **G1 ✅ (E12, it.11)** Frozen full-battery baseline seeded for both
+  candidates; ledger is now the reference for future serving experiments.
 - **H1 ✅ (E7)** Endpoint inventory + published one-command probe suite.
 - **H2 ✅ COMPLETE (E8 it.7, E9 it.8, E11 it.10)** Claude Code + OpenCode +
   OpenClaw e2e in LXC; Cline/Kilo = config-level doc (API surface verified).
