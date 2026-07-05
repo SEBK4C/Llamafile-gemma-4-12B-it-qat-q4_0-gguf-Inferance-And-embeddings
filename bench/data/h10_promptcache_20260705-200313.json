@@ -1,0 +1,63 @@
+{
+ "suite": "h10_promptcache",
+ "stamp": "20260705-200313",
+ "context_tokens_target": 16000,
+ "rows": [
+  {
+   "prompt_tokens": 11561,
+   "cached_tokens": 0,
+   "prefill_ms": 4108.735,
+   "wall": 4.63,
+   "turn": 0,
+   "kind": "COLD"
+  },
+  {
+   "prompt_tokens": 11559,
+   "cached_tokens": 11543,
+   "prefill_ms": 22.234,
+   "wall": 0.15,
+   "turn": 1,
+   "kind": "warm"
+  },
+  {
+   "prompt_tokens": 11558,
+   "cached_tokens": 11543,
+   "prefill_ms": 22.303,
+   "wall": 0.26,
+   "turn": 2,
+   "kind": "warm"
+  },
+  {
+   "prompt_tokens": 11560,
+   "cached_tokens": 11543,
+   "prefill_ms": 25.448,
+   "wall": 0.17,
+   "turn": 3,
+   "kind": "warm"
+  },
+  {
+   "prompt_tokens": 11560,
+   "cached_tokens": 11543,
+   "prefill_ms": 25.553,
+   "wall": 0.08,
+   "turn": 4,
+   "kind": "warm"
+  },
+  {
+   "prompt_tokens": 11558,
+   "cached_tokens": 11543,
+   "prefill_ms": 22.379,
+   "wall": 0.35,
+   "turn": 5,
+   "kind": "warm"
+  },
+  {
+   "prompt_tokens": 11562,
+   "cached_tokens": 0,
+   "prefill_ms": 4077.636,
+   "wall": 4.59,
+   "turn": "ctrl",
+   "kind": "control-newctx"
+  }
+ ]
+}
