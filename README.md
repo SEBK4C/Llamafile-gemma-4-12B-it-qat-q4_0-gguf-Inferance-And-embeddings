@@ -62,6 +62,14 @@ make package
 ./dist/gemma4-server.llamafile --port 9000   # CLI args override baked-in ones
 ```
 
+### Serving it well
+
+**[docs/SERVING_GUIDE.md](docs/SERVING_GUIDE.md)** distills 20 iterations of
+end-to-end measurement into one actionable page: endpoints, sampler/system-prompt
+defaults, the empty-response footgun and its fix, the full latency model
+(prefill / caching / decode), concurrency, embeddings, and agent setup — each
+claim linked to the experiment that established it.
+
 ### Test your hardware in one command
 
 ```sh
