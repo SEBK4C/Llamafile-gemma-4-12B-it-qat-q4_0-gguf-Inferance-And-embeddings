@@ -61,7 +61,11 @@ if [ -f "$VOICE_APE" ] && [ -f "$VOICE_GGUF" ]; then
 else
     echo "note: voice payload missing — packaging without baked read-aloud"
 fi
-"${ROOT}/bin/zipalign" -j0 "$OUT" "$MODEL" "$MMPROJ" $EXTRA "${TMP}/.args"
+# ui-config.json holds the default WebUI settings (system prompt + sampler);
+# referenced by --ui-config-file /zip/ui-config.json in .args (a file avoids the
+# .args double-quote stripping that breaks inline --ui-config JSON).
+[ -f "${ROOT}/package/ui-config.json" ] || { echo "error: package/ui-config.json missing" >&2; exit 1; }
+"${ROOT}/bin/zipalign" -j0 "$OUT" "$MODEL" "$MMPROJ" $EXTRA "${ROOT}/package/ui-config.json" "${TMP}/.args"
 chmod +x "$OUT"
 
 echo "Built $(du -h "$OUT" | cut -f1) $(basename "$OUT")"
