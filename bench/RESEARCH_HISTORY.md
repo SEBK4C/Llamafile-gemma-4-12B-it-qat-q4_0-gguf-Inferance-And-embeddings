@@ -503,7 +503,53 @@ should_answer disposition rubrics, GLM-5.2 judge). Data:
    Sebastian's call (outward-facing); mechanism verified earlier (it.5-era).
 Chart: `data/g8_decline_20260705.png`.
 
+### E15 — G9: does the G8 decline clause cost quality on the full battery? (SUCCESS + a noise lesson; iteration 15)
+G8 only measured disposition (cal). Before the ship recommendation could stand,
+G9 checks whether the longer decline-clause prompt regresses acc/hum/soph on the
+FULL frozen battery (same 11-probe filtered set as E12 → directly comparable).
+Ran the decline candidate TWICE (transparency, not cherry-pick).
+
+| candidate | acc | hum | soph | cal | rep | serve_score | status |
+|---|---|---|---|---|---|---|---|
+| bare (E12) | 0.80 | 2.64 | 3.64 | 0.875 | 0.091 | 65.2 | baseline |
+| Constitution (E12) | 0.80 | 2.86 | 3.64 | 1.00 | 0.091 | 66.1 | keep |
+| +decline run 1 | 0.889 | 2.95 | 4.00 | 1.00 | 0.095 | **69.7** | discard* |
+| +decline run 2 | 0.90 | 2.45 | 4.00 | 1.00 | 0.000 | **65.2** | keep |
+| +decline MEAN | 0.895 | 2.70 | 4.00 | 1.00 | 0.048 | 67.5 | — |
+
+**Findings:**
+1. **No quality regression from the longer prompt — the G9 concern is refuted.**
+   The ROBUST signals (both runs agree): acc CONSISTENTLY up (0.89-0.90 vs
+   0.80), soph CONSISTENTLY up (exactly 4.00 vs 3.64), cal perfect (1.00). The
+   decline clause improves quality if anything.
+2. **Noise lesson (re-confirms the E4 theme at the composite level):** hum
+   swung 2.45↔2.95 and serve_score swung 65.2↔69.7 for the SAME candidate
+   across two runs. At n=2 replicas the composite CANNOT rank prompts sitting
+   in the 65-70 band — only the stable sub-scores (acc/soph/cal) are
+   trustworthy. Don't rank on composite deltas this small.
+3. *The run-1 "discard" was a rep-GATE artifact* (rep 0.095 > 0.09 threshold);
+   run 2 got rep 0.000 → the loops-probe rep metric is noisy and the gate is
+   brittle at the boundary. NOT a real repetition regression.
+4. A transient server HTTP 500 hit one probe in run 1 (scored as failure →
+   understated that run's acc); run 2 was clean (0 errors). Harness correctly
+   logged-and-continued (F-note: single-probe failures don't abort a run).
+5. **Ship recommendation STANDS and is now de-risked on quality:** decline
+   clause = perfect jailbreak decline (G8, powered n=4/probe) + consistent
+   acc/soph gains + perfect cal + no regression. The composite-noise caveat
+   doesn't touch the decision (it's not a regression, just unrankable at n=2).
+Chart: `data/g9_composite_20260705.png` (per-run dots show the variance
+honestly). Generator `chart_g9.py`.
+
+## Meta-lesson (iterations 11-15)
+Small-n composite scores are for GATING (does anything regress?), not RANKING
+(which prompt is best). Rank on powered, targeted sub-experiments (G8 jailbreak
+n=4/probe; the acc/soph sub-scores that agree across runs), not on a 1-point
+serve_score delta. This is the E4→E5 lesson, now generalized.
+
 ## Goals (phase 2)
+- **G9 ✅ (E15, it.15)** Decline-clause quality validated: no regression, acc &
+  soph consistently up, cal perfect; composite unrankable at n=2 (noise). Ship
+  recommendation de-risked.
 - **G8 ✅ (E14, its.13-14)** Explicit decline clause → perfect jailbreak
   resistance (0.75→1.00) at zero over-refusal cost; candidate ready to ship as
   WebUI default pending Sebastian's go.
