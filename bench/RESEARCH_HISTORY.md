@@ -1174,3 +1174,35 @@ Program section: bench/phase3-ingest-program.md § P-SPRINT.
 - **Shipped config**: v1 schema + DRY, pipeline C=2 → **17.58 docs/min**.
   Gate: tick 1 of 2 without ≥5% improvement. NEXT: P3 (OCR tier/threads —
   second-largest stage), then P4 embed path.
+
+## P3 ✅ (2026-07-06) — OCR tiers: medium stays; +8% via threads; GATE MET
+- **Tier sweep** (golden CER + REAL FUNSD, per P2's judge-on-real-scans
+  lesson): small = 2.1× faster (854 ms doc_page) with FUNSD F1 **parity**
+  (0.923 vs 0.925) BUT **dense doc_page CER 0.1004** — forms have large
+  sparse text; dense A4 body text is exactly the primary workload →
+  REJECTED. tiny = 3.8× faster, F1 0.87, dict only 6904 chars → rejected.
+  **medium stays** (CER 0.0000 everywhere; the FUNSD-parity trap would
+  have shipped a 10%-CER regression if the golden battery hadn't included
+  a dense page — keep both fixture classes forever).
+- **Threads**: `intra_op_num_threads=8` → 1757 ms vs 1906 (default −1);
+  4 threads WORSE (2766). Shipped in `ocr.make_engine`.
+- **SPRINT EXIT GATE MET** (P2 and P3 both <5% pipeline docs/min gain).
+  **Frozen config**: worker pipeline C=2 · enrichment v1+DRY · PP-OCRv6
+  medium @ intra8 · qwen3-last sidecar -c 4096 → **17.58 docs/min**,
+  quality batteries green. P4/P5 fold into VARIETY where relevant.
+- **NEXT: VARIETY** — full real_eval suite at larger n, EM1 BEIR harness,
+  mixed 100-file batch through the frozen worker; failures become fixtures.
+
+## T1 ✅ (2026-07-06) — Sebastian's directive: enrichment for raw API text
+- Raw TEXT sent to the API now gets the SAME JSON enrichment pass:
+  `ingest_worker.ingest_text()` (text → grammar enrichment → hint chunking
+  → embeddings → ingest.v1 envelope; sha256 of the text = id). e2e PASS:
+  lease-addendum text → task_domain "law", clean title/entities, 1 chunk,
+  1024-dim doc+chunk vectors, 2.89 s.
+- **Contract**: `/v1/embeddings` remains PURE OpenAI (F13 — SDK compat);
+  the enrichment-carrying surface is the `/v1/ingest` service (I7 wrap),
+  which accepts `{"text": …}` alongside files and returns the envelope.
+- **QA flag for VARIETY (F20-adjacent)**: one entity was COMPOSED, not
+  extracted — "2026-06-30" fused from signed-date 2026-06-15 + "30 days".
+  Entity-fidelity check (entities must be substrings or normalized forms
+  of source text) goes into the VARIETY battery.

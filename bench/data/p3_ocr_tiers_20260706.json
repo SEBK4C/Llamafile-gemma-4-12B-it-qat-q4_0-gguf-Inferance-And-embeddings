@@ -1,0 +1,33 @@
+{
+ "tiers": {
+  "medium": {
+   "mean_cer": 0.0,
+   "doc_page_ms": 1820,
+   "funsd_f1": 0.925
+  },
+  "small": {
+   "mean_cer": 0.0201,
+   "doc_page_cer": 0.1004,
+   "doc_page_ms": 854,
+   "funsd_f1": 0.923
+  },
+  "tiny": {
+   "mean_cer": 0.0605,
+   "doc_page_ms": 473,
+   "funsd_f1": 0.87
+  }
+ },
+ "threads_medium_doc_page_ms": {
+  "-1": 1906,
+  "8": 1757,
+  "4": 2766
+ },
+ "verdict": "medium stays (small fails DENSE pages 0.1004 despite FUNSD parity); intra_op=8 shipped (+8%); sprint EXIT GATE MET (P2+P3 both <5% pipeline gain) -> VARIETY",
+ "text_api_route": {
+  "e2e": "PASS",
+  "wall_s": 2.89,
+  "domain": "law",
+  "dims": 1024,
+  "note": "entity 2026-06-30 was COMPOSED (signed 2026-06-15 + 30-day term) \u2014 entity-fidelity QA item for VARIETY"
+ }
+}

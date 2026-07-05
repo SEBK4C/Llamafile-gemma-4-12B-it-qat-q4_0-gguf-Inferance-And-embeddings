@@ -26,7 +26,8 @@ DICT = os.environ.get("PPOCR_DICT", f"{MODELS}/ppocrv6_rec/ppocrv6_dict.txt")
 def make_engine():
     from rapidocr_onnxruntime import RapidOCR
     kw = dict(det_model_path=DET, rec_model_path=REC, rec_keys_path=DICT,
-              det_db_thresh=0.2, det_db_box_thresh=0.45, det_db_unclip_ratio=1.4)
+              det_db_thresh=0.2, det_db_box_thresh=0.45, det_db_unclip_ratio=1.4,
+              intra_op_num_threads=8)  # P3: 1757ms vs 1906 default on doc_page
     try:
         return RapidOCR(**kw)
     except TypeError:  # older/newer arg names — fall back to model paths only

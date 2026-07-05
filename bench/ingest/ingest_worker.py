@@ -145,6 +145,55 @@ def ingest_one(path, base, embed_base, stages, keep_vectors=False):
     return env
 
 
+def ingest_text(text, base, embed_base, stages=None, name="api_text",
+                keep_vectors=False):
+    """Sebastian 2026-07-06: raw TEXT sent to the API gets the SAME JSON
+    enrichment pass as files — this is the text route of the /v1/ingest
+    surface (per F13, /v1/embeddings itself stays pure OpenAI shape; the
+    enrichment-carrying contract is /v1/ingest)."""
+    import hashlib
+    stages = stages or Stages()
+    t_doc = time.time()
+    sha = hashlib.sha256(text.encode()).hexdigest()
+
+    with stages.enrich:
+        t0 = time.time()
+        er = enrich(base, text, {"sha256": sha, "name": name,
+                                  "bytes": len(text.encode()),
+                                  "source_type": "text_api"}, None)
+        stages.add("enrich", time.time() - t0)
+    e = er["enrichment"]
+    ok = er["parse_error"] is None and semantic_valid(e)
+
+    t0 = time.time()
+    chk._TOK_BASE = embed_base
+    chunks = chk.chunk_text(text, e if ok else None, None)
+    stages.add("chunk", time.time() - t0)
+
+    with stages.embed:
+        t0 = time.time()
+        doc_text = chk.doc_summary_text(e) if ok else text[:512]
+        vecs = embed(embed_base, [doc_text] + [c["text"] for c in chunks])
+        stages.add("embed", time.time() - t0)
+
+    env = {"schema_version": "ingest.v1", "pipeline_version": "p3.0",
+           "file": {"sha256": sha, "name": name, "bytes": len(text.encode()),
+                     "mtime": None, "exif": None},
+           "source_type": "text_api", "pages": None,
+           "text_chars": len(text), "transcript": None,
+           "enrichment": e, "enrich_ok": ok,
+           "chunks": [dict(c, embedding=(vecs[1+i] if keep_vectors else None),
+                            embedding_dims=len(vecs[1+i]))
+                      for i, c in enumerate(chunks)],
+           "doc_embedding": vecs[0] if keep_vectors else None,
+           "doc_embedding_dims": len(vecs[0]),
+           "wall_s": round(time.time() - t_doc, 2)}
+    if not keep_vectors:
+        for c in env["chunks"]:
+            c.pop("embedding", None)
+    return env
+
+
 def run_batch(files, out_dir, base, embed_base, mode, force, keep_vectors):
     os.makedirs(out_dir, exist_ok=True)
     stages = Stages()
@@ -190,6 +239,7 @@ def run_batch(files, out_dir, base, embed_base, mode, force, keep_vectors):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("file", nargs="?")
+    ap.add_argument("--text", help="ingest a raw text string (the API text route)")
     ap.add_argument("--batch"); ap.add_argument("--out", default="envelopes")
     ap.add_argument("--base", required=True); ap.add_argument("--embed-base", required=True)
     ap.add_argument("--mode", choices=["pipeline", "serial"], default="pipeline")
@@ -197,6 +247,10 @@ def main():
     ap.add_argument("--keep-vectors", action="store_true")
     ap.add_argument("--report")
     a = ap.parse_args()
+    if a.text is not None:
+        env = ingest_text(a.text, a.base, a.embed_base, keep_vectors=a.keep_vectors)
+        print(json.dumps(env, indent=1, ensure_ascii=False))
+        return 0
     if a.batch:
         files = [l.strip() for l in open(a.batch) if l.strip()]
         rep = run_batch(files, a.out, a.base, a.embed_base, a.mode, a.force, a.keep_vectors)
