@@ -1238,3 +1238,32 @@ Program section: bench/phase3-ingest-program.md § P-SPRINT.
   (drop vs flag when OCR coverage is imperfect).
 - **NEXT**: Q2 (SROIE + ChartQA labeled rates), then EM1 BEIR harness;
   100-file variety batch.
+
+## Q2 ✅ (2026-07-06) — labeled rates (CORD-v2): key-field recall 100%,
+## gate false-drop 0%, measured hallucination rate 6.7%
+- **Setup**: 10 labeled CORD-v2 receipts (naver-clova-ix, datasets-server
+  /rows with retry — the API 502s intermittently; small windows + backoff)
+  → `q2_labeled.py` runs each through the FULL frozen pipeline
+  (ingest_one: OCR → enrich+image → Q1 gate → chunks → vectors, ~4.5 s/
+  receipt) and scores against ground truth. SROIE swapped for CORD (parquet
+  -served, cleaner labels); ChartQA descoped to its own tick (chart labels
+  don't map cleanly to chart_reading prose — needs value-level fixtures).
+- **Key-field (labeled total price) — 100% end-to-end**: in OCR 10/10 →
+  extracted by enrichment 10/10 → survives the fidelity gate 10/10;
+  **gate false-drop 0/10**. Labels resolve Q1's open question: the drop
+  policy is SAFE where OCR coverage is complete; Q1's FUNSD drops were the
+  degraded-OCR case (vision-read values absent from OCR text). Q5 policy
+  direction: keep DROP for good-OCR docs; consider flag-not-drop when OCR
+  confidence/coverage is low (decidable per-doc from OCR scores later).
+- **Measured F20 rate**: hallucinated prose numbers 1/15 = **6.7%** (one
+  receipt's summary carried one unsupported number — exactly the class
+  the flag-only policy marks with `ungrounded_number`). Menu-name recall
+  0.80 (soft metric; 2 receipts summarized without listing item names —
+  acceptable: entities ≠ inventory).
+- **Numbers now on record**: OCR coverage, model extraction recall, gate
+  survival, gate false-drop, hallucination rate — the Q-loop's Tier-2
+  statistical bounds exist for the receipt domain. Remaining Q backlog:
+  Q3 seeded-fault catch-rates at scale (fidelity selftest already seeds
+  12), Q4 verify-pass A/B, ChartQA-style chart-number fidelity tick.
+- **NEXT**: EM1 (BEIR NFCorpus harness — embedding tick) or the 100-file
+  variety batch; Q3/Q4 as follow-ups.
