@@ -1018,3 +1018,28 @@ and deployed. Includes I1b (hardened fixture).
   tripwires, must-mention), content quality spot-audited not judged.
 - **NEXT**: I5 router + deterministic extractors (MIME routing, PDF
   text-layer probe, EXIF, real-photo fixtures), then I6 chunker.
+
+## I5 ✅ (2026-07-05) — router 9/9 + FIRST full-pipeline e2e PASS (5.79 s)
+- **Deliverables**: `bench/ingest/router.py` (magic-byte router +
+  deterministic extractors: PyMuPDF per-page text-layer probe with ≥20-char
+  threshold + 200-DPI rasterize for scan pages; CSV/code/text parsers;
+  piexif EXIF camera/DateTimeOriginal/GPS→decimal; RAW via TIFF magic +
+  extension; WAV duration), `make_fixtures_router.py` + `fixtures_router/`
+  (9 fixtures incl. generated text/scan/MIXED PDFs, EXIF+GPS JPEG, fake
+  DNG, silence WAV), `chain_smoke.py` (pipeline front-to-back — the I7
+  worker's skeleton).
+- **Router bench: 9/9 first try.** Tier-0 works: digital PDF text never
+  touches OCR; the mixed PDF yields page-level kinds [text, scan].
+- **Chain smoke on pdf_mixed.pdf: PASS.** route 86 ms → PP-OCRv6 on the
+  scan page 1830 ms → Gemma-4 grammar enrichment 3022 ms (task_domain
+  home_office ✓, chunking_hints Header/Line-Items/Totals ✓, entities
+  capture amounts/card ✓) → Qwen3 sidecar 856 ms (2×1024-dim vectors).
+  **Total 5.79 s ≈ 10 docs/min single-threaded** — first measured
+  full-chain number; enrichment remains the dominant stage as predicted.
+- **Caveats**: people[] STILL untested — synthetic fixtures can't fake
+  humans. Ask Sebastian for 2-3 real photos into a LOCAL-ONLY dir (never
+  committed/uploaded; guardrail: no PII in fixtures). MP3/M4A duration not
+  parsed (WAV only); RAW is detect-only (no decode — dcraw candidate if
+  ever needed).
+- **NEXT**: I6 chunker (enrichment-hint-guided, 256–1024 tok, doc-summary
+  vector), then I7 /v1/ingest worker (chain_smoke → service).
