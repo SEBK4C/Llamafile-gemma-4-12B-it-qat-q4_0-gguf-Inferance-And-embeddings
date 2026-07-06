@@ -1610,6 +1610,23 @@ loop). VARIETY/EM/Q backlog resumes post-release.
   CT 118 (drop ExecStart overrides that force the old sidecar layout,
   retire embed.service — the baked sidecar takes :8081).
 
+## v0.6.1 RELEASED (2026-07-06, Sebastian's ask) — /v1/embeddings
+## semantically useful BY DEFAULT
+- Sebastian flagged the stale README warning and asked for the new stack
+  to BE the default. Shipped: server.cpp wraps the OpenAI embeddings
+  route — when the baked Qwen3 sidecar is present the request forwards
+  transparently (1024-dim retrieval-grade vectors, zero client config).
+  Native 3840-dim output: per-request `X-Raw-Embeddings: 1` or
+  `LLAMAFILE_NO_EMBED=1`. Helper lives in server-http.cpp (owns httplib);
+  patch 0020 regenerated across the three server files.
+- Verified: default path 1024-dim + sane cosines; raw header path
+  3840-dim; **api_probe 18 PASS / 0 FAIL — the suite's long-standing
+  documented FAIL is gone because the endpoint is now CORRECT, not
+  because the test softened.** README table row rewritten with usage
+  guidance (docs bare; Instruct-prefixed queries, −17% without);
+  docs/embeddings.md carries the v0.6.1 scoping note; release notes +
+  GitHub v0.6.1 release + HF binary (xet) + card updated.
+
 - **Phase-3 core is now demonstrably COMPLETE end-to-end** (ingest →
   enrich → gate → chunk → embed → store → hybrid query). Remaining:
   EM2/EM6/Q4 refinements, I10 contention doc, and the v0.6.0
