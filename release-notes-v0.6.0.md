@@ -39,10 +39,10 @@ One file now serves **chat + retrieval-grade embeddings + document ingest**.
   (`bench/ingest/ingest_worker.py`) until the OCR runtime is APE-portable
   (program I12). The in-APE gate covers substring/digits/date-tuples/
   token-subset; month-name date normalization is python-only.
-- The **voice** supervisor does not yet self-reap after SIGKILL of the main
-  process (the embed supervisor does); repeated hard kills can stack
-  orphaned Kokoro listeners on :8078/:8079 until reboot or manual kill.
-  Fix queued (same parent-liveness pattern as embed).
+- ~~Voice supervisor SIGKILL leak~~ — fixed before release: both the voice
+  watchdog and the embed supervisor are now tied to the main server's
+  lifetime and self-reap after any kill, including SIGKILL (validated:
+  0 orphaned listeners/processes 26 s after `kill -9`).
 - Windows: >4 GB APE limit unchanged — use `bin/llamafile` + external
   weights.
 

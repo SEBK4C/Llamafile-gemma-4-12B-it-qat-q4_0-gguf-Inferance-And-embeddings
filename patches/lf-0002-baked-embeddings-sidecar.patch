@@ -127,3 +127,41 @@ index 0000000..aafa9d6
 +                    "(LLAMAFILE_NO_EMBED=1 disables)\n", port);
 +    return port;
 +}
+diff --git a/llamafile/voice.c b/llamafile/voice.c
+index 61af87d..b396fe1 100644
+--- a/llamafile/voice.c
++++ b/llamafile/voice.c
+@@ -73,18 +73,25 @@ int llamafile_voice_start(void) {
+     char wd[PATH_MAX];
+     snprintf(wd, sizeof(wd), "%svoice-watchdog.sh", app);
+     int have_wd = llamafile_extract("/zip/voice-watchdog.sh", wd);
+-    char cmd[768];
++    // Both branches are tied to OUR pid (F25): atexit cleanup never runs on
++    // SIGKILL, which leaked watchdog/respawn loops and stacked orphans on
++    // the voice ports; the loops now check the parent every cycle.
++    char cmd[1024];
+     if (have_wd) {
+         snprintf(cmd, sizeof(cmd),
+-                 "( /bin/sh \"$3\" \"$1\" \"$2\" %s ) & "
+-                 "( /bin/sh \"$3\" \"$1\" \"$2\" %d ) & "
+-                 "wait", VOICE_PORT, atoi(VOICE_PORT) + 1);
++                 "( /bin/sh \"$3\" \"$1\" \"$2\" %s %d ) & "
++                 "( /bin/sh \"$3\" \"$1\" \"$2\" %d %d ) & "
++                 "wait", VOICE_PORT, (int) getpid(), atoi(VOICE_PORT) + 1, (int) getpid());
+     } else {
+         snprintf(cmd, sizeof(cmd),
+-                 "NP=\"nice -n -5\"; command -v nice >/dev/null 2>&1 || NP=\"\"; "
+-                 "( while :; do $NP /bin/sh \"$1\" -mp \"$2\" --port %s; sleep 2; done ) & "
+-                 "( while :; do $NP /bin/sh \"$1\" -mp \"$2\" --port %d; sleep 2; done ) & "
+-                 "wait", VOICE_PORT, atoi(VOICE_PORT) + 1);
++                 "NP=\"nice -n -5\"; command -v nice >/dev/null 2>&1 || NP=\"\"; P=%d; "
++                 "( while kill -0 $P 2>/dev/null; do $NP /bin/sh \"$1\" -mp \"$2\" --port %s & C=$!; "
++                 "while kill -0 $C 2>/dev/null && kill -0 $P 2>/dev/null; do sleep 2; done; "
++                 "kill -0 $P 2>/dev/null || kill $C 2>/dev/null; sleep 2; done ) & "
++                 "( while kill -0 $P 2>/dev/null; do $NP /bin/sh \"$1\" -mp \"$2\" --port %d & C=$!; "
++                 "while kill -0 $C 2>/dev/null && kill -0 $P 2>/dev/null; do sleep 2; done; "
++                 "kill -0 $P 2>/dev/null || kill $C 2>/dev/null; sleep 2; done ) & "
++                 "wait", (int) getpid(), VOICE_PORT, atoi(VOICE_PORT) + 1);
+     }
+     char *argv[] = {"/bin/sh", "-c", cmd, "g4voice", ape, gguf, wd, (char *)0};
+     extern char **environ;
