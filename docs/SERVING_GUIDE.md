@@ -85,12 +85,18 @@ latency degrades linearly — **zero errors/drops through 8 concurrent** (E13).
 - 4+: throughput-capped and laggy. Budget ~200 tok/s **total**, not per client.
 - Want real parallelism? Raise `-np N` + KV budget (untested; 12 GB is the limit).
 
-## 6. Embeddings — use a sidecar
+## 6. Embeddings — good by default since v0.6.1
 
-The chat model's `/v1/embeddings` returns valid-shaped vectors that **aren't
-semantic** — unrelated pairs can score *higher* than related ones (E10). Run a
-146 MB nomic-embed sidecar through the **same llamafile binary** (`-m` + CPU
-flags; margins jump from ≈0 to +0.4–0.5). Full recipe: [docs/embeddings.md](embeddings.md).
+`/v1/embeddings` now transparently serves the **baked Qwen3-Embedding-0.6B
+sidecar** (1024-dim, retrieval-grade) whenever the packaged embedding payload
+is present — no setup. Usage that matters: documents bare, queries prefixed
+`Instruct: <task>\nQuery: ` (−17% retrieval quality without it). The chat
+model's raw pooled vectors (3840-dim, NOT semantic — unrelated pairs can
+score *higher* than related, E10) are research-only: `X-Raw-Embeddings: 1`
+per request or `LLAMAFILE_NO_EMBED=1` globally. Pre-v0.6.1 builds or
+external-weights runs: use a sidecar via `-m` (full recipe:
+[docs/embeddings.md](embeddings.md)). For OCR/STT + enrichment JSON + chunked
+vectors in one call: `POST /v1/ingest` ([docs/INGEST_GUIDE.md](INGEST_GUIDE.md)).
 
 ## 7. Coding agents
 

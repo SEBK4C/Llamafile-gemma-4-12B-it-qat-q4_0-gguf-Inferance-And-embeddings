@@ -124,7 +124,7 @@ claim linked to the experiment that established it.
 python3 bench/api_probe.py --base http://127.0.0.1:8080
 ```
 
-19 end-to-end tests across every endpoint and modality — chat (plain + SSE),
+21 end-to-end tests across every endpoint and modality — chat (plain + SSE),
 Anthropic `/v1/messages`, the Responses API, embeddings, **vision**,
 **audio-in**, **TTS** — each with wall-clock speed on *your* hardware.
 Stdlib-only, no installs. `--quick` skips the media tests; add

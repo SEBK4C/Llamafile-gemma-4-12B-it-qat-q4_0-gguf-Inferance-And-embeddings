@@ -1,8 +1,11 @@
 # Embeddings & multi-model serving
 
-**TL;DR: do not use the main model's `/v1/embeddings` for anything semantic.**
-Run a tiny dedicated embedding model next to it — the same llamafile binary
-serves it. Verified end-to-end 2026-07-05.
+**TL;DR (v0.6.1+): `/v1/embeddings` is retrieval-grade by default** — the
+packaged file forwards it to the baked Qwen3 sidecar; see the 2026-07-06
+update below for usage. The warning that follows applies to the RAW chat
+model's vectors (pre-v0.6.1 builds, `X-Raw-Embeddings: 1`, or
+`LLAMAFILE_NO_EMBED=1` runs): do not use those for anything semantic —
+run a dedicated embedding model instead. Verified end-to-end 2026-07-05.
 
 ## The problem (measured)
 
