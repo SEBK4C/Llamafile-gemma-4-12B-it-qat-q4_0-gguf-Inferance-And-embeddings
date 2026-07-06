@@ -1,0 +1,7 @@
+{
+ "config": "qwen3-last-instr",
+ "n_docs": 3633,
+ "n_queries": 323,
+ "ndcg@10": 0.3626,
+ "recall@100": 0.3369
+}
