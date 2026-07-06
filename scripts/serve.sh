@@ -97,8 +97,26 @@ TTS_MODEL="${ROOT}/models/Kokoro_no_espeak_Q4.gguf"
 if [ "${GEMMA4_TTS:-1}" = "1" ] && [ -x "$TTS_BIN" ] && [ -f "$TTS_MODEL" ]; then
     TTS_PORT="${GEMMA4_TTS_PORT:-8091}"
     if ! curl -s -o /dev/null "http://127.0.0.1:${TTS_PORT}/health" 2>/dev/null; then
-        "$TTS_BIN" -mp "$TTS_MODEL" --port "$TTS_PORT" >/dev/null 2>&1 &
+        # -nt 4: measured optimum on M1 Pro — the hardware-concurrency default
+        # (10, spilling onto efficiency cores) synthesizes 3-8x slower
+        # (RTF 1.6-3.6 vs 0.48). Metal (--use-metal) crashes this ggml
+        # vintage on Kokoro's ops — keep TTS on CPU.
+        "$TTS_BIN" -mp "$TTS_MODEL" -nt "${GEMMA4_TTS_THREADS:-4}" \
+            --port "$TTS_PORT" >/dev/null 2>&1 &
         echo "voice: started tts-server on 127.0.0.1:${TTS_PORT}" >&2
+        # Pre-warm off the critical path: the first synthesis builds the
+        # compute graph (~seconds); warming now means the first UI read-aloud
+        # click streams immediately.
+        (
+            for _ in $(seq 1 60); do
+                curl -s -o /dev/null "http://127.0.0.1:${TTS_PORT}/health" 2>/dev/null && break
+                sleep 1
+            done
+            curl -s -o /dev/null "http://127.0.0.1:${TTS_PORT}/v1/audio/speech" \
+                -H 'Content-Type: application/json' \
+                -d '{"input":"ready","voice":"af_heart"}' 2>/dev/null
+            echo "voice: tts-server pre-warmed" >&2
+        ) &
     fi
     LLAMAFILE_TTS_PORT="$TTS_PORT"
     export LLAMAFILE_TTS_PORT

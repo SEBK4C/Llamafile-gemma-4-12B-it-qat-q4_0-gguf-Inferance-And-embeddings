@@ -19,9 +19,14 @@ make serve       # spawns the sidecar and proxies /tts automatically
 ```
 
 `scripts/serve.sh` auto-detects `bin/tts-server` + the GGUF, spawns the
-sidecar on 8091, and sets `LLAMAFILE_TTS_PORT` so the server's built-in
-`/tts` reverse proxy (patches/lf-0003) activates — the web UI probes
-`/tts/health` and shows the read-aloud ▶ controls automatically. The mic 🎙
+sidecar on 8091 with `-nt 4` and pre-warms it, and sets `LLAMAFILE_TTS_PORT`
+so the server's built-in `/tts` reverse proxy (patches/lf-0003) activates —
+the web UI probes `/tts/health` and shows the read-aloud ▶ controls
+automatically. Thread count matters a lot on Apple Silicon: `-nt 4` measures
+RTF 0.48 on M1 Pro while the hardware-concurrency default (10, spilling onto
+efficiency cores) is 3–8× slower; `GEMMA4_TTS_THREADS` overrides. Do NOT use
+`--use-metal` — it crashes this ggml vintage on Kokoro's ops (same
+kernel-vintage class as the mmproj Metal assert). The mic 🎙
 (speech input) needs no sidecar at all: audio goes to the model itself via
 the mmproj (verified word-perfect transcription on M1 Pro).
 
