@@ -1397,3 +1397,29 @@ loop). VARIETY/EM/Q backlog resumes post-release.
   live. Mac e2e starts after publish per the directive; the APE is
   all-platform by construction (cosmocc multi-arch + Metal/CUDA/CPU
   backends baked).
+
+## V6 ticks 5-6 (2026-07-06) — release still gated; backlog resumed:
+## EM1 in flight, Q3 ✅ gate calibrated
+- **EM1 (H-C, BEIR NFCorpus)**: `embed_real_bench.py` built — 3633
+  abstracts + 323 test queries + graded qrels (direct parquet/tsv resolve
+  downloads; the jsonl.gz paths on BeIR repos are stubs now), doc
+  embeddings cached per config hash so future candidates pay the corpus
+  once. Corpus embed running against the live CT sidecar in the
+  background (CPU-bound as expected, sidecar ~67% CPU, healthy).
+  nDCG@10 / Recall@100 baseline lands when it completes.
+- **Q3 ✅ (48 seeded probes over 10 real sources — CORD OCR, FUNSD OCR,
+  lease, CSV): the fidelity gate is now a CALIBRATED instrument.**
+  Catch-rates: composed_date 3/3, digit_mutation 10/10,
+  fabricated_amount 10/10, fake_name 10/10 — **100% on every fault class
+  the gate claims to catch**. Controls: substr_true 10/10, reformat_date
+  3/3; reorder_name 7/9 where BOTH misses are seed-generator artifacts
+  (the multiword regex captured truncated decimals — entity digits "11"
+  vs source value "11.000" — the gate CORRECTLY refused; controls
+  effectively clean). **unit_swap blind spot CONFIRMED exactly as
+  predicted: 3/3 slipped** ("412 kWh"→"412 EUR" grounds digit-wise and
+  token-wise) — a unit-context check is the queued fix if VARIETY shows
+  it matters in practice. Traps re-hit: FUNSD `._` AppleDouble leftovers
+  from the pre-fix fetch still lived in datasets_real (now deleted +
+  filtered in the source lister).
+- **Still waiting on Sebastian's prod-pause go for the CUDA battery +
+  v0.6.0 publish.**
