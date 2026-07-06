@@ -1,0 +1,47 @@
+{
+ "n": 87,
+ "enrich_ok": 87,
+ "types": {
+  "audio": 10,
+  "csv": 1,
+  "code": 1,
+  "image_photo": 71,
+  "pdf_scan": 1,
+  "pdf_text": 1,
+  "pdf_mixed": 1,
+  "text": 1
+ },
+ "entities_total": 457,
+ "entities_grounded": 381,
+ "flags": {
+  "instruction_like_text": 7,
+  "ungrounded_entity": 38,
+  "empty_document": 2,
+  "partial_document": 21,
+  "ungrounded_number": 13,
+  "rotated_text": 1,
+  "low_contrast": 1,
+  "no_extracted_text_provided": 1,
+  "no_speech_content": 1,
+  "no_visual_content": 1,
+  "low_legibility": 10,
+  "blurry_image": 1,
+  "crumpled_document": 1
+ },
+ "report": {
+  "mode": "pipeline",
+  "files": 87,
+  "done": 87,
+  "skipped": 0,
+  "failed": [],
+  "wall_s": 269.4,
+  "docs_per_min": 19.38,
+  "stage_busy_s": {
+   "ocr": 57.6,
+   "stt": 16.7,
+   "enrich": 516.6,
+   "chunk": 1.1,
+   "embed": 71.4
+  }
+ }
+}
