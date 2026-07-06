@@ -1,4 +1,4 @@
-# v0.6.0 — embeddings and ingest, baked in (DRAFT — publish after CUDA e2e)
+# v0.6.0 — embeddings and ingest, baked in
 
 One file now serves **chat + retrieval-grade embeddings + document ingest**.
 
@@ -46,8 +46,13 @@ One file now serves **chat + retrieval-grade embeddings + document ingest**.
 - Windows: >4 GB APE limit unchanged — use `bin/llamafile` + external
   weights.
 
-## Release gate
+## CUDA e2e (RTX 3080 Ti, full offload — release gate PASSED 2026-07-06)
 
-CUDA full-offload e2e on the RTX 3080 Ti pending a production pause window;
-CPU battery + CUDA backend registration (ARCHS 750–1200) verified. Publish
-to GitHub main + HF happens after that run per the release directive.
+Healthy in 12 s, 11 GB VRAM (prod-equivalent footprint). Full api_probe:
+**19 PASS** / 1 expected-FAIL (the 12B's own `/v1/embeddings` anisotropy,
+documented) / 1 legacy-skip, in 15.7 s. Chat **105.5 tok/s** (prod band).
+`/v1/ingest` 1.97 s end-to-end on GPU with fidelity 5/5; `/embed/v1/*`,
+vision, TTS (1.79× realtime) all green; audio-in transcribes LibriSpeech
+verbatim with `enable_thinking:false` (the probe's audio "FAIL" is its
+thinking-budget artifact, documented as H8/F15). Production pause for the
+test window: 2 min 07 s, restored and verified.
