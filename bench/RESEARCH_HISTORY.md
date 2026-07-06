@@ -1423,3 +1423,22 @@ loop). VARIETY/EM/Q backlog resumes post-release.
   filtered in the source lister).
 - **Still waiting on Sebastian's prod-pause go for the CUDA battery +
   v0.6.0 publish.**
+
+## EM1 ✅ (2026-07-06) — NFCorpus baseline: the embedding stack scores in
+## the published band; P4 threads applied
+- **H-C baseline (qwen3-last, generic Instruct, docs bare @≤1900 chars):
+  nDCG@10 0.3626 / Recall@100 0.3369** over 3633 docs / 323 test queries —
+  inside the ~0.35–0.39 band strong small embedders publish on NFCorpus.
+  The number matters twice: it is the comparison anchor for every EM knob
+  (EM2 composite fields, EM3 MRL dims, EM4 instruction phrasing), and it
+  end-to-end validates pooling patch 0019 + the canonical usage rules
+  against a public benchmark.
+- **Cost profile**: corpus 5188 s at the old threads-4 sidecar (~81 tok/s
+  prefill — P4's measurement, made during the run); queries only 16 s.
+  Doc embeddings cached by config hash → future candidates pay ~16 s
+  unless the DOC-side config changes. Sidecar now at **--threads 8**
+  (P4: 1.7×), applied and verified AFTER the run completed (the queued
+  no-mid-run-restart discipline held).
+- **NEXT (EM queue)**: EM3 MRL truncation is nearly free now (re-rank
+  cached 1024-dim vectors truncated to 512/256 — no re-embedding);
+  EM4 instruction sweep costs ~16 s per phrasing. Both fit single ticks.
