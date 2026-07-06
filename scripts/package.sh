@@ -43,10 +43,17 @@ done
 mkdir -p "${ROOT}/dist"
 cp "${ROOT}/bin/llamafile" "$OUT"
 
-# Stage the .args under its in-zip name (zipalign stores the basename)
+# Stage the .args under their in-zip names (zipalign stores the basename).
+# .args.xnu is the macOS/Metal profile — the patched binary (patches/lf-0002)
+# prefers it on Darwin; every other OS reads .args. Two profiles because the
+# tuned configs are NOT portable: the CUDA defaults (-fa auto, no ctx cap,
+# GPU mmproj) run the packaged file at ~6 tok/s on Apple Silicon, while the
+# Metal profile (-c 8192, -ub 1024, --no-mmproj-offload, -fa on) is the
+# E2E-verified fast path (~21 tok/s M1 Pro; see docs/PLATFORM-NOTES.md).
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 cp "${ROOT}/package/gemma4.args" "${TMP}/.args"
+cp "${ROOT}/package/gemma4.args.xnu" "${TMP}/.args.xnu"
 
 # -j0: store aligned + uncompressed so weights mmap directly from the zip
 [ -f "$DRAFTER" ] || { echo "error: $DRAFTER missing — default args enable draft-mtp" >&2; exit 1; }
@@ -65,7 +72,7 @@ fi
 # referenced by --ui-config-file /zip/ui-config.json in .args (a file avoids the
 # .args double-quote stripping that breaks inline --ui-config JSON).
 [ -f "${ROOT}/package/ui-config.json" ] || { echo "error: package/ui-config.json missing" >&2; exit 1; }
-"${ROOT}/bin/zipalign" -j0 "$OUT" "$MODEL" "$MMPROJ" $EXTRA "${ROOT}/package/ui-config.json" "${TMP}/.args"
+"${ROOT}/bin/zipalign" -j0 "$OUT" "$MODEL" "$MMPROJ" $EXTRA "${ROOT}/package/ui-config.json" "${TMP}/.args" "${TMP}/.args.xnu"
 chmod +x "$OUT"
 
 echo "Built $(du -h "$OUT" | cut -f1) $(basename "$OUT")"

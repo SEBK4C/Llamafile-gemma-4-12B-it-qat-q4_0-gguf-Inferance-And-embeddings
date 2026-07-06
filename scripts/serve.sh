@@ -78,8 +78,15 @@ UBATCH_DEFAULT=2048
 [ "$(uname -s)" = "Darwin" ] && UBATCH_DEFAULT=1024
 UBATCH="${GEMMA4_UBATCH:-$UBATCH_DEFAULT}"
 
+# WebUI defaults (system prompt + sampler) — same file the packaged
+# llamafile bakes; without it `make serve` gives a bare UI.
+UI_CONFIG="${ROOT}/package/ui-config.json"
+UI_ARGS=""
+[ -f "$UI_CONFIG" ] && UI_ARGS="--ui-config-file $UI_CONFIG"
+
 exec "$BIN" --server \
     $SPEC_ARGS \
+    $UI_ARGS \
     --ctx-checkpoints "${GEMMA4_CKPT:-0}" \
     --slot-save-path "$KV_DIR" \
     -m "$MODEL" \

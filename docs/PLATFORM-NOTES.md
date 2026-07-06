@@ -22,6 +22,24 @@ right on one box doesn't silently break another.
 **Rule of thumb for portable invocations** (any machine, CPU fallback):
 `-ngl 0 --gpu disable -sm layer -ctk f16 -ctv f16 --flash-attn off --spec-type none`
 
+## Platform-conditional baked defaults (.args.xnu) — 2026-07-06
+
+The tuned serving configs are not portable (this whole page is the evidence),
+so the packaged llamafile now carries **per-OS args profiles**:
+
+- `patches/lf-0002-platform-conditional-args.patch` — the launcher prefers
+  `/zip/.args.xnu` on macOS (`IsXnu()`), falling back to `/zip/.args`.
+  Linux/CUDA/BSD behavior is byte-identical to before (always `.args`).
+- `package/gemma4.args.xnu` — the Metal profile baked by `scripts/package.sh`:
+  MTP drafter on (n_max 2), `-fa on`, `-c 8192 -np 2 -b/-ub 1024`,
+  `--no-mmproj-offload`, f16 KV, the v0.5.0 sampler + `ui-config.json`.
+- `package/gemma4.args` — unchanged CUDA/default profile (plus the MTP block
+  that v0.5.0's release notes document but the args file had lost).
+
+Symptom this fixes: the packaged file on Apple Silicon ran at ~6 tok/s with a
+bare Web UI (CUDA-tuned `.args`: `-fa auto`, no context cap under `--fit off`,
+GPU-side mmproj, no MTP), vs ~21 tok/s with the Metal profile.
+
 ## Apple Silicon (M1 Pro 32 GB) measured baseline — 2026-07-06
 
 Full E2E verified via `scripts/mac-full-test.sh` (llamafile 0.10.7, external GGUFs):
