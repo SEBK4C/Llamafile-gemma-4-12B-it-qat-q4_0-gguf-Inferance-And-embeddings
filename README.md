@@ -9,7 +9,7 @@ one set of weights in memory, one KV cache, one port:
 | Endpoint | What it does |
 |---|---|
 | `POST /v1/chat/completions` | OpenAI-style chat (Gemma 4 chat template, thinking channel in `reasoning_content`) — accepts text, **images** (`image_url` data URIs) and **audio** (`input_audio`, wav/mp3) |
-| `POST /v1/embeddings` | OpenAI-style embeddings (3840-dim, mean-pooled, L2-normalized) — ⚠️ **API-compatible but not semantically useful** (measured: unrelated pairs can score *higher* than related ones); for retrieval/RAG run the [146 MB embedding sidecar](docs/embeddings.md) |
+| `POST /v1/embeddings` | **v0.6.1: semantically useful by default.** With the baked [Qwen3-Embedding-0.6B](https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF) present (it is, in the packaged file), this OpenAI endpoint transparently serves the sidecar's **1024-dim retrieval-grade vectors** — every OpenAI client gets good embeddings with zero config. Best use: embed documents bare; prefix queries with `Instruct: <task>\nQuery: ` (measured +2.7% for domain phrasing, **−17% if you skip the instruction**; see [docs/embeddings.md](docs/embeddings.md)). The 12B's raw pooled output (3840-dim, anisotropic — unrelated pairs can score higher than related; kept for research) is available per-request via header `X-Raw-Embeddings: 1`, or globally with `LLAMAFILE_NO_EMBED=1`. For OCR/STT + enrichment JSON + vectors in one call, use `POST /v1/ingest`. |
 | `GET /health`, `POST /tokenize`, … | usual llama-server extras |
 
 ## What's new in v0.6.0 — embeddings and ingest, baked in ([full changelog](CHANGELOG.md))
@@ -20,10 +20,11 @@ one set of weights in memory, one KV cache, one port:
 supervised CPU embedding sidecar on startup, reverse-proxied at
 `/embed/v1/embeddings`, `/embed/health` and `/embed/tokenize`. No systemd
 unit, no second download — one file serves chat *and* semantically useful
-embeddings. (The 12B's own `/v1/embeddings` remains what it always was — a
-decoder-only model's anisotropic vectors; use `/embed/v1/embeddings` for
-retrieval. Measured comparison: [docs/embeddings.md](docs/embeddings.md).)
-Opt out with `LLAMAFILE_NO_EMBED=1`.
+embeddings. (v0.6.1: the main `/v1/embeddings` endpoint now serves these
+sidecar vectors **by default** — no client changes needed; the 12B's raw
+anisotropic output is still reachable via `X-Raw-Embeddings: 1`. Measured
+comparison: [docs/embeddings.md](docs/embeddings.md).) Opt out entirely
+with `LLAMAFILE_NO_EMBED=1`.
 
 **`POST /v1/ingest` — text in, retrieval-ready JSON out.** The document
 pipeline developed in [bench/ingest/](bench/ingest/) runs *inside* the

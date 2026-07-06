@@ -125,6 +125,18 @@ both used by the phase-3 ingest design (`bench/phase3-ingest-program.md`).
   to `/opt/nomic-embed-text-v1.5.Q8_0.gguf` (still on disk) and drop
   `--pooling mean --no-warmup`.
 
+## Update 2026-07-06 (v0.6.1): `/v1/embeddings` is semantic BY DEFAULT
+
+In the packaged v0.6.1+ llamafile the main OpenAI endpoint transparently
+forwards to the baked Qwen3 sidecar — the TL;DR at the top of this file
+now only applies to (a) pre-v0.6.1 builds, (b) `LLAMAFILE_NO_EMBED=1`
+runs, or (c) requests sent with `X-Raw-Embeddings: 1`. How to use it well:
+documents bare, queries prefixed `Instruct: <task>\nQuery: ` (EM4: domain
+phrasing +2.7%, NO instruction −17%), 1024 dims (MRL-truncatable, EM3).
+Full pipeline (OCR/STT → enrichment JSON → fidelity gate → chunks →
+vectors): `POST /v1/ingest` for text, `bench/ingest/ingest_worker.py`
+for files. Probe suite runs 18 PASS / 0 FAIL on this build.
+
 ## Update 2026-07-05 later (phase-3 I13): Qwen3-Embedding-0.6B, canonical, is the sidecar
 
 F16 is FIXED by `patches/0019-qwen3-pooled-embeddings-no-out-ids.patch`
