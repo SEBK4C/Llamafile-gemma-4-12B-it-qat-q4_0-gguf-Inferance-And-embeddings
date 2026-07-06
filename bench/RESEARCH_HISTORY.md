@@ -1564,6 +1564,29 @@ loop). VARIETY/EM/Q backlog resumes post-release.
   (3) optional deploy of the v6 APE to CT 118 (retiring embed.service).
   The loop will idle-tick against this list until the go arrives.
 
+## INC-1 (2026-07-06) — self-inflicted prod voice outage: caused, caught,
+## repaired, rule hardened
+- **What happened**: my host-side "orphan cleanup" during V6 ticks 4/7
+  (`for pid in $(ps aux | grep g4voice ...); kill -9`) matched CT 118's
+  PRODUCTION voice supervisors — host ps sees LXC pids, the exact trap
+  engineering-lessons recorded from the 2026-07-05 near-miss. Second
+  strike of a documented trap. The unsupervised voice instances later
+  wedged/died; main+embed were unaffected.
+- **Detection**: tick-16 staging-integrity check (/tts/health → "voice
+  backend not ready"); journal showed watchdog silence since 07-04 and
+  zero voice processes in the CT.
+- **Repair (no gemma.service restart needed)**: respawned both watchdog
+  lanes in-CT (`setsid voice-watchdog.sh <ape> <gguf> 8078/8079`),
+  verified :8078 healthy and tailnet /tts/health OK. Note: if
+  gemma.service restarts later its own spawn will fail-bind against these
+  (harmless); the v6 deploy replaces the whole arrangement with
+  parent-tied supervisors.
+- **Rule hardened (memory updated)**: NEVER kill by pattern from the PVE
+  host for anything that also runs inside CTs. Scope kills via
+  `pct exec <ct> -- kill ...`, or verify the pid's namespace
+  (`/proc/<pid>/root` → CT rootfs?) first. fuser -k on host-owned ports
+  remains safe; process-name sweeps are not.
+
 - **Phase-3 core is now demonstrably COMPLETE end-to-end** (ingest →
   enrich → gate → chunk → embed → store → hybrid query). Remaining:
   EM2/EM6/Q4 refinements, I10 contention doc, and the v0.6.0
