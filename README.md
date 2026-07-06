@@ -119,6 +119,16 @@ that (the artifact disables the upstream checkpoint prefill split, worth up to
 CPU-only mode (`-ngl 0`, any x86_64/arm64 box) is roughly 4–5× slower than
 Metal on the same machine; MTP still gives ~+14% there.
 
+### Measured speed (Apple M1 Pro, 32 GB — E2E verified 2026-07-06)
+
+21.5–22.2 tok/s on prose regardless of MTP: the M1 Pro's faster base decode
+(higher memory bandwidth than plain M4) meets the same batch-2 verify cost,
+so speculation is **break-even** here rather than 1.6× (acceptance 0.91,
+but b=2 decode ≈ 1.75× a single step — see the Metal finding below).
+Full feature matrix (chat, embeddings, concurrency, KV persistence,
+image input, MTP) verified via `./scripts/mac-full-test.sh --start-server`;
+Mac-specific footguns are logged in `docs/PLATFORM-NOTES.md`.
+
 ### Memory by context size (measured, default config with MTP drafter + mmproj)
 
 | `-c` (context) | KV + compute (private) | + weights (mmap) | practical total |

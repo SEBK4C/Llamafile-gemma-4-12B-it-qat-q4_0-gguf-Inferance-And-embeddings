@@ -14,8 +14,12 @@
 #   GEMMA4_CTX       total context size     (default 8192; model max is 262144)
 #   GEMMA4_SLOTS     parallel slots         (default 2 — lets an embedding
 #                    request run alongside an in-flight generation)
-#   GEMMA4_UBATCH    physical batch         (default 2048; pooled embedding
-#                    prompts cannot split, so this caps embedding input length)
+#   GEMMA4_UBATCH    physical batch         (default 2048 on Linux/CUDA, 1024
+#                    on macOS; pooled embedding prompts cannot split, so this
+#                    caps embedding input length. On Apple Silicon Metal a
+#                    2048-wide ubatch exhausts command-buffer memory —
+#                    kIOGPUCommandBufferCallbackErrorOutOfMemory on M1 Pro
+#                    32 GB — while 1024 is verified stable.)
 #   GEMMA4_NGL       GPU layers             (default 999 = all, Metal on macOS)
 #   GEMMA4_MM=0      disable multimodal (image + audio) input; on by default.
 #                    The projector runs on CPU (--no-mmproj-offload): it is a
@@ -69,6 +73,11 @@ fi
 # slot's KV cache here, surviving restarts (GEMMA4_KV_DIR overrides).
 KV_DIR="${GEMMA4_KV_DIR:-${ROOT}/.kvcache}"
 
+# Metal command buffers OOM above ~1024-wide ubatches (M1 Pro 32 GB measured).
+UBATCH_DEFAULT=2048
+[ "$(uname -s)" = "Darwin" ] && UBATCH_DEFAULT=1024
+UBATCH="${GEMMA4_UBATCH:-$UBATCH_DEFAULT}"
+
 exec "$BIN" --server \
     $SPEC_ARGS \
     --ctx-checkpoints "${GEMMA4_CKPT:-0}" \
@@ -79,8 +88,8 @@ exec "$BIN" --server \
     --pooling "${GEMMA4_POOLING:-mean}" \
     -c "${GEMMA4_CTX:-8192}" \
     -np "${GEMMA4_SLOTS:-2}" \
-    -b "${GEMMA4_UBATCH:-2048}" \
-    -ub "${GEMMA4_UBATCH:-2048}" \
+    -b "$UBATCH" \
+    -ub "$UBATCH" \
     -ngl "${GEMMA4_NGL:-999}" \
     --host "${GEMMA4_HOST:-127.0.0.1}" \
     --port "${GEMMA4_PORT:-8080}" \
