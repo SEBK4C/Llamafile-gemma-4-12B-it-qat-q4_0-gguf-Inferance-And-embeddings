@@ -2,6 +2,20 @@
 
 All notable changes to this project. Dates are 2026.
 
+## [v0.7.1] — 2026-07-07 — hardware autotune restored; fork source recovered
+
+The v0.3 autotune was never on the public fork — every artifact carried it
+in the binary while its source lived only in CT 118's local checkout (the
+same unpushed-tree drift as voice.c). Recovered: the CT tree is pushed as
+fork branch `ct-prod-vendor`; the Mac platform work is rebased onto it as
+`v0.7.x-universal` (autotune + per-OS baked args + sidecar env ports + UI
+tag pin, composing cleanly — baked args and user flags always beat
+autotune). The universal artifact now self-tunes bare on CUDA/Metal/CPU,
+fixing the v0.7.0 bare-boot OOM on 12 GB NVIDIA cards. The retired
+`patches/lf-*` files now live in-tree on the pushed fork branch; the
+.gitmodules pin finally references public commits. Embedding sidecar keeps
+`-np 2` (it spawns with its own args; main-model autotune cannot touch it).
+
 ## [v0.7.0] — 2026-07-07 — Mac Metal parity, voice, prewarmed first message
 
 Full v0.6.1 feature parity on Apple Silicon (api_probe 21 PASS / 0 FAIL /
