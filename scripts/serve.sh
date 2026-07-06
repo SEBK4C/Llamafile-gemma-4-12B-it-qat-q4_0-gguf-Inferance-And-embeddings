@@ -84,6 +84,26 @@ UI_CONFIG="${ROOT}/package/ui-config.json"
 UI_ARGS=""
 [ -f "$UI_CONFIG" ] && UI_ARGS="--ui-config-file $UI_CONFIG"
 
+# Voice replies (read-aloud): spawn the TTS.cpp Kokoro sidecar when built
+# (bin/tts-server + models/Kokoro_no_espeak_Q4.gguf, see voice/BAKED-VOICE.md)
+# and point the server's /tts reverse proxy at it via LLAMAFILE_TTS_PORT
+# (patches/lf-0003). The web UI probes /tts/health and shows the read-aloud
+# controls only when it answers. GEMMA4_TTS=0 disables; GEMMA4_TTS_PORT
+# overrides the port. The sidecar is CPU-only — it never contends with the
+# LLM for the GPU. It outlives this script's exec as an orphan; use
+# voice/voice-watchdog.sh for supervised deployments.
+TTS_BIN="${ROOT}/bin/tts-server"
+TTS_MODEL="${ROOT}/models/Kokoro_no_espeak_Q4.gguf"
+if [ "${GEMMA4_TTS:-1}" = "1" ] && [ -x "$TTS_BIN" ] && [ -f "$TTS_MODEL" ]; then
+    TTS_PORT="${GEMMA4_TTS_PORT:-8091}"
+    if ! curl -s -o /dev/null "http://127.0.0.1:${TTS_PORT}/health" 2>/dev/null; then
+        "$TTS_BIN" -mp "$TTS_MODEL" --port "$TTS_PORT" >/dev/null 2>&1 &
+        echo "voice: started tts-server on 127.0.0.1:${TTS_PORT}" >&2
+    fi
+    LLAMAFILE_TTS_PORT="$TTS_PORT"
+    export LLAMAFILE_TTS_PORT
+fi
+
 exec "$BIN" --server \
     $SPEC_ARGS \
     $UI_ARGS \
