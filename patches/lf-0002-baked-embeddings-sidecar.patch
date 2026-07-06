@@ -12,10 +12,10 @@ index 6d4cbcb..b36e03c 100644
  
 diff --git a/llamafile/embed.c b/llamafile/embed.c
 new file mode 100644
-index 0000000..aafa9d6
+index 0000000..b2ca4d8
 --- /dev/null
 +++ b/llamafile/embed.c
-@@ -0,0 +1,111 @@
+@@ -0,0 +1,113 @@
 +// -*- mode:c;indent-tabs-mode:nil;c-basic-offset:4;coding:utf-8 -*-
 +// vi: set et ft=c ts=4 sts=4 sw=4 fenc=utf-8 :vi
 +#define _COSMO_SOURCE // makedirs()
@@ -31,7 +31,9 @@ index 0000000..aafa9d6
 +// Config matches the validated CT 118 sidecar (RESEARCH_HISTORY I13/I6):
 +// Qwen3-Embedding needs --pooling last (fork patch 0019), -c 4096 so a
 +// 1024-token chunk fits a slot at -np 2, CPU-only (-ngl 0) — the GPU
-+// belongs to chat + enrichment.
++// belongs to chat + enrichment. Thread count is left to llamafile's
++// per-machine default: a hardcoded --threads 4 cost 1.7x bulk throughput
++// on a 12-core host (P4 sweep) and would oversubscribe small machines.
 +//
 +// Guards: child runs with LLAMAFILE_NO_EMBED=1 (no recursion) and
 +// LLAMAFILE_NO_VOICE=1 (F17: the sidecar must not fight the main server's
@@ -101,7 +103,7 @@ index 0000000..aafa9d6
 +             "LLAMAFILE_NO_EMBED=1 LLAMAFILE_NO_VOICE=1 "
 +             "/bin/sh \"$1\" --server -m \"$2\" --embeddings --pooling last "
 +             "--host 127.0.0.1 --port %s -ngl 0 --spec-type none --no-mmproj "
-+             "-c 4096 -ub 512 -np 2 --threads 4 >/dev/null 2>&1 & C=$!; "
++             "-c 4096 -ub 512 -np 2 >/dev/null 2>&1 & C=$!; "
 +             "while kill -0 $C 2>/dev/null && kill -0 $P 2>/dev/null; do sleep 2; done; "
 +             "kill -0 $P 2>/dev/null || { kill $C 2>/dev/null; exit 0; }; "
 +             "sleep 2; done",

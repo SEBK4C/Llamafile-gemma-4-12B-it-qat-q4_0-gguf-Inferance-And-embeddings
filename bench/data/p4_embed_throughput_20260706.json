@@ -1,0 +1,22 @@
+[
+ {
+  "config": "sidecar-current: t4 ub512 np2",
+  "wall_s": 91.1,
+  "docs_per_s": 0.7
+ },
+ {
+  "config": "t8 ub2048 np1",
+  "wall_s": 53.1,
+  "docs_per_s": 1.2
+ },
+ {
+  "config": "t12 ub2048 np1",
+  "wall_s": 58.1,
+  "docs_per_s": 1.1
+ },
+ {
+  "config": "t8 ub512 np2",
+  "wall_s": 54.3,
+  "docs_per_s": 1.18
+ }
+]
