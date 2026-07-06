@@ -1,0 +1,56 @@
+{
+ "conditions": [
+  {
+   "cond": "clean_line",
+   "vlm_cer": 0.0,
+   "ocr_cer": 0.0,
+   "wall_s": 0.56,
+   "prompt_tokens": 266,
+   "finish": "stop",
+   "gt_chars": 58,
+   "vlm_text": "The quick brown fox jumps over 13 lazy dogs on 2026-07-05."
+  },
+  {
+   "cond": "receipt",
+   "vlm_cer": 0.0,
+   "ocr_cer": 0.0,
+   "wall_s": 1.01,
+   "prompt_tokens": 297,
+   "finish": "stop",
+   "gt_chars": 130,
+   "vlm_text": "PVE HOMELAB SUPPLY\n2026-07-05 14:32\n---------------------------------------\nUSB 10G NIC          89.00\nNVMe 2TB           119.90\nCat6a 10m             8.45\n---------------------------------------\nTOTAL EUR          217.35\nVAT 19%            34.71\nCard **** 4821"
+  },
+  {
+   "cond": "doc_page_top6",
+   "vlm_cer": 0.0,
+   "ocr_cer": 0.0,
+   "wall_s": 0.85,
+   "prompt_tokens": 303,
+   "finish": "stop",
+   "gt_chars": 393,
+   "vlm_text": "Phase 3 converts every file in the archive into enriched text before\nembedding. Scanned pages pass through PP-OCRv6 detection and\nrecognition, while digital PDFs keep their native text layer intact.\nThe Gemma 4 model then answers one structured question battery per\ndocument: does the image contain text, is it a chart, who is present,\nand where are the logical chunk boundaries for retrieval?"
+  },
+  {
+   "cond": "doc_page_full",
+   "vlm_cer": 0.0076,
+   "ocr_cer": 0.0,
+   "wall_s": 1.84,
+   "prompt_tokens": 308,
+   "finish": "stop",
+   "gt_chars": 916,
+   "vlm_text": "Phase 3 converts every file in the archive into enriched text before\nembedding. Scanned pages pass through PP-OCRv6 detection and\nrecognition, while digital PDFs keep their native text layer intact.\nThe gpt-4a model then answers one structured question battery per\ndocument: does the image contain text, is it a chart, who is present,\nand where are the logical chunk boundaries for retrieval?\n\nEach chunk of 256 to 1024 tokens receives its own vector from the\nembeddinggemma-300m sidecar running on CPU port 8081. The document\nsummary gets one additional vector for hierarchical search. Hybrid\nretrieval fuses BM25 over the enrichment JSON with dense cosine\nsimilarity, using reciprocal rank fusion at query time.\n\nThroughput is bounded by the enrichment call, not the OCR stage.\nThe server ceiling near 200 tokens per second implies roughly two to\nsix documents per minute during bulk backfill of the family archive."
+  }
+ ],
+ "has_text": {
+  "blank": {
+   "expect": "no",
+   "got": "no",
+   "ok": true
+  },
+  "doc_page": {
+   "expect": "yes",
+   "got": "yes",
+   "ok": true
+  }
+ }
+}

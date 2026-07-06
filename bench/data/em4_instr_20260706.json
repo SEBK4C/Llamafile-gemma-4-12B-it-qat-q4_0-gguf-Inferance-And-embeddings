@@ -1,0 +1,22 @@
+{
+ "generic-web (baseline)": {
+  "ndcg@10": 0.3626,
+  "recall@100": 0.3369
+ },
+ "TASK.med": {
+  "ndcg@10": 0.3724,
+  "recall@100": 0.3452
+ },
+ "nfcorpus-tuned": {
+  "ndcg@10": 0.375,
+  "recall@100": 0.3424
+ },
+ "short": {
+  "ndcg@10": 0.3626,
+  "recall@100": 0.3368
+ },
+ "bare (no instruction)": {
+  "ndcg@10": 0.2999,
+  "recall@100": 0.3116
+ }
+}

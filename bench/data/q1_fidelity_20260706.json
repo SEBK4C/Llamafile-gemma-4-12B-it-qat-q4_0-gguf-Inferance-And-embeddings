@@ -1,0 +1,57 @@
+{
+ "docs_text": 16,
+ "docs_visual_skipped": 6,
+ "entities_total": 166,
+ "entities_grounded": 139,
+ "dropped": [
+  "82253362_3364.png: MAVERICK SPECIALS MENTBOL",
+  "82253245_3247.png: 7-11 319 Zon",
+  "82253058_3059.png: MRS. K. A. SP sparrow",
+  "82253058_3059.png: 12/10/1996",
+  "82253058_3059.png: 82253056",
+  "82253058_3059.png: 317 8458071",
+  "82252956_2958.png: 82252955",
+  "82251504.png: Greensboro",
+  "82200067_0069.png: 09/17/96",
+  "82200067_0069.png: Ultra Lights 100'S",
+  "82250337_0338.png: Divisions 621 and 637",
+  "82250337_0338.png: 822503337",
+  "tone.wav: tone.wav",
+  "82092117.png: (336) 333-7392",
+  "82092117.png: (614) 465-8980",
+  "82092117.png: Columbus, Ohio 43213-3428",
+  "82092117.png: 820921117",
+  "table.csv: 2026-06-30",
+  "pdf_scan.pdf: Phase 3",
+  "pdf_scan.pdf: 256 to 1020 tokens",
+  "pdf_scan.pdf: embeddinggemma-3000m",
+  "pdf_mixed.pdf: 2026-07-35",
+  "script.py: script.py",
+  "chart_bars.png: Quarterly Revenue 2022",
+  "chart_bars.png: Q3",
+  "pdf_text.pdf: Invoice 2026-04",
+  "pdf_text.pdf: DE89 370400440532013000"
+ ],
+ "flags": {
+  "instruction_like_text": 6,
+  "ungrounded_entity": 15,
+  "ungrounded_number": 7,
+  "partial_document": 1
+ },
+ "batch": {
+  "mode": "pipeline",
+  "files": 22,
+  "done": 22,
+  "skipped": 0,
+  "failed": [],
+  "wall_s": 69.3,
+  "docs_per_min": 19.05,
+  "stage_busy_s": {
+   "ocr": 25.1,
+   "stt": 2.7,
+   "enrich": 129.6,
+   "chunk": 0.3,
+   "embed": 25.8
+  }
+ }
+}

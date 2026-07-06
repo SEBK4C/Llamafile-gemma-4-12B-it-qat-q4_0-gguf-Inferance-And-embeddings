@@ -1,0 +1,156 @@
+{
+ "stamp": "20260705-133610",
+ "model": "gemma-4-12b-it-qat-q4_0.gguf",
+ "modalities": {
+  "vision": true,
+  "audio": true
+ },
+ "total_wall_s": 12.4,
+ "pass": 18,
+ "fail": 1,
+ "skip": 0,
+ "results": [
+  {
+   "test": "health",
+   "endpoint": "GET /health",
+   "status": "PASS",
+   "wall_s": 0.007,
+   "detail": "{'status': 'ok'}"
+  },
+  {
+   "test": "props",
+   "endpoint": "GET /props",
+   "status": "PASS",
+   "wall_s": 0.005,
+   "detail": "model=gemma-4-12b-it-qat-q4_0.gguf ctx=131072 vision=True audio=True"
+  },
+  {
+   "test": "models",
+   "endpoint": "GET /v1/models",
+   "status": "PASS",
+   "wall_s": 0.005,
+   "detail": "['gemma-4-12b-it-qat-q4_0.gguf']"
+  },
+  {
+   "test": "tokenize_roundtrip",
+   "endpoint": "POST /tokenize+/detokenize",
+   "status": "PASS",
+   "wall_s": 0.009,
+   "detail": "2 tokens -> 'hello world'"
+  },
+  {
+   "test": "chat_completions",
+   "endpoint": "POST /v1/chat/completions",
+   "status": "PASS",
+   "wall_s": 3.02,
+   "detail": "content='The sky is blue because the atmosphere scatters shorter blue wavelengths of sunlight more tok/s(wall)=130.1",
+   "gen_tokens": 393,
+   "tok_s_wall": 130.1
+  },
+  {
+   "test": "chat_stream",
+   "endpoint": "POST /v1/chat/completions (SSE)",
+   "status": "PASS",
+   "wall_s": 0.462,
+   "detail": "chunks=61 ttft=0.11s",
+   "ttft_s": 0.107
+  },
+  {
+   "test": "completions_v1",
+   "endpoint": "POST /v1/completions",
+   "status": "PASS",
+   "wall_s": 0.172,
+   "detail": "'1111111111111111'"
+  },
+  {
+   "test": "completion_native",
+   "endpoint": "POST /completion",
+   "status": "PASS",
+   "wall_s": 0.17,
+   "detail": "content='8877777777777777' server-tok/s=113.8",
+   "tok_s_server": 113.8
+  },
+  {
+   "test": "messages_anthropic",
+   "endpoint": "POST /v1/messages",
+   "status": "PASS",
+   "wall_s": 0.454,
+   "detail": "blocks=['thinking', 'text'] text='PONG' stop=end_turn"
+  },
+  {
+   "test": "messages_stream",
+   "endpoint": "POST /v1/messages (SSE)",
+   "status": "PASS",
+   "wall_s": 0.438,
+   "detail": "events={'message_start': 1, 'content_block_start': 2, 'content_block_delta': 64, 'content_block_stop': 2, 'message_delta': 1, 'message_stop': 1} ttft=0.07s",
+   "ttft_s": 0.066
+  },
+  {
+   "test": "count_tokens",
+   "endpoint": "POST /v1/messages/count_tokens",
+   "status": "PASS",
+   "wall_s": 0.007,
+   "detail": "input_tokens=18"
+  },
+  {
+   "test": "responses_api",
+   "endpoint": "POST /v1/responses",
+   "status": "PASS",
+   "wall_s": 0.344,
+   "detail": "output_types=['reasoning', 'message'] text='PONG'"
+  },
+  {
+   "test": "embeddings",
+   "endpoint": "POST /v1/embeddings",
+   "status": "FAIL",
+   "wall_s": 0.058,
+   "detail": "dims=3840 cos(cat,kitten)=0.980 > cos(cat,spreadsheet)=0.990 -> semantic sanity",
+   "dims": 3840,
+   "cos_close": 0.9801,
+   "cos_far": 0.9899
+  },
+  {
+   "test": "vision_input",
+   "endpoint": "POST /v1/chat/completions",
+   "status": "PASS",
+   "wall_s": 1.393,
+   "detail": "expected 'red', got 'Red'"
+  },
+  {
+   "test": "tts_speech",
+   "endpoint": "POST /tts/v1/audio/speech",
+   "status": "PASS",
+   "wall_s": 3.012,
+   "detail": "98444B wav, 2.05s audio, 0.68x realtime",
+   "rtf": 0.68
+  },
+  {
+   "test": "audio_input",
+   "endpoint": "POST /v1/chat/completions",
+   "status": "PASS",
+   "wall_s": 2.78,
+   "detail": "TTS->ears round-trip; expected 'banana', got 'banana'"
+  },
+  {
+   "test": "unsupported_metrics",
+   "endpoint": "GET /metrics",
+   "status": "PASS",
+   "wall_s": 0.005,
+   "detail": "expect 501 (off by default / model lacks FIM), got 501"
+  },
+  {
+   "test": "unsupported_rerank",
+   "endpoint": "POST /v1/rerank",
+   "status": "PASS",
+   "wall_s": 0.005,
+   "detail": "expect 501 (off by default / model lacks FIM), got 501"
+  },
+  {
+   "test": "unsupported_infill",
+   "endpoint": "POST /infill",
+   "status": "PASS",
+   "wall_s": 0.005,
+   "detail": "expect 501 (off by default / model lacks FIM), got 501"
+  }
+ ]
+}

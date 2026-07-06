@@ -1,0 +1,46 @@
+{
+ "suite": "embeddings_compare",
+ "date": "2026-07-05",
+ "models": {
+  "gemma-4-12b (main /v1/embeddings)": {
+   "dims": 3840,
+   "pairs": [
+    {
+     "label": "cat vs kitten / spreadsheet",
+     "related": 0.98,
+     "unrelated": 0.99
+    },
+    {
+     "label": "cat-on-mat vs rug / revenue",
+     "related": 0.869,
+     "unrelated": 0.849
+    },
+    {
+     "label": "bake bread vs baking / segfault",
+     "related": 0.918,
+     "unrelated": 0.953
+    }
+   ]
+  },
+  "nomic-embed-v1.5 (sidecar /embed)": {
+   "dims": 768,
+   "pairs": [
+    {
+     "label": "cat vs kitten / spreadsheet",
+     "related": 0.837,
+     "unrelated": 0.374
+    },
+    {
+     "label": "cat-on-mat vs rug / revenue",
+     "related": 0.69,
+     "unrelated": 0.28
+    },
+    {
+     "label": "bake bread vs baking / segfault",
+     "related": 0.82,
+     "unrelated": 0.282
+    }
+   ]
+  }
+ }
+}

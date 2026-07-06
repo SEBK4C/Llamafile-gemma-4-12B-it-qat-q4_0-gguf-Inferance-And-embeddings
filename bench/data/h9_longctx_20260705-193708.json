@@ -1,0 +1,57 @@
+{
+ "suite": "h9_longctx",
+ "reps": 3,
+ "rows": [
+  {
+   "target": 1000,
+   "actual_tokens": 767,
+   "found": 3,
+   "n": 3,
+   "accuracy": 1.0,
+   "prefill_s": 0.28,
+   "prefill_tok_s": 2858,
+   "wall_s": 0.45
+  },
+  {
+   "target": 4000,
+   "actual_tokens": 2987,
+   "found": 3,
+   "n": 3,
+   "accuracy": 1.0,
+   "prefill_s": 1.0,
+   "prefill_tok_s": 3030,
+   "wall_s": 1.12
+  },
+  {
+   "target": 16000,
+   "actual_tokens": 11867,
+   "found": 3,
+   "n": 3,
+   "accuracy": 1.0,
+   "prefill_s": 4.2,
+   "prefill_tok_s": 2831,
+   "wall_s": 4.37
+  },
+  {
+   "target": 64000,
+   "actual_tokens": 47387,
+   "found": 3,
+   "n": 3,
+   "accuracy": 1.0,
+   "prefill_s": 22.34,
+   "prefill_tok_s": 2123,
+   "wall_s": 22.6
+  },
+  {
+   "target": 100000,
+   "actual_tokens": 74027,
+   "found": 3,
+   "n": 3,
+   "accuracy": 1.0,
+   "prefill_s": 41.85,
+   "prefill_tok_s": 1770,
+   "wall_s": 42.34
+  }
+ ],
+ "stamp": "20260705-193708"
+}

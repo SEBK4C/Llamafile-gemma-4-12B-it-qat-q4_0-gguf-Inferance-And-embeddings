@@ -1,0 +1,44 @@
+{
+ "suite": "h8_thinking",
+ "budget": 1024,
+ "reps": 2,
+ "classes": {
+  "creative_constrained": {
+   "n": 4,
+   "think_on_empty_rate": 0.5,
+   "think_off_empty_rate": 0.0,
+   "mean_reasoning_chars": 2953
+  },
+  "creative_open": {
+   "n": 4,
+   "think_on_empty_rate": 0.25,
+   "think_off_empty_rate": 0.0,
+   "mean_reasoning_chars": 2553
+  },
+  "factual_simple": {
+   "n": 4,
+   "think_on_empty_rate": 0.0,
+   "think_off_empty_rate": 0.0,
+   "mean_reasoning_chars": 144
+  },
+  "code": {
+   "n": 4,
+   "think_on_empty_rate": 0.0,
+   "think_off_empty_rate": 0.0,
+   "mean_reasoning_chars": 982
+  },
+  "math": {
+   "n": 4,
+   "think_on_empty_rate": 0.0,
+   "think_off_empty_rate": 0.0,
+   "mean_reasoning_chars": 517
+  },
+  "structured_list": {
+   "n": 4,
+   "think_on_empty_rate": 0.0,
+   "think_off_empty_rate": 0.0,
+   "mean_reasoning_chars": 1573
+  }
+ },
+ "stamp": "20260705-190936"
+}

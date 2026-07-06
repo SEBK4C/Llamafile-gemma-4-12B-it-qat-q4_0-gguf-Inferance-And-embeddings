@@ -1,0 +1,569 @@
+{
+ "summary": {
+  "composed_date": {
+   "n": 3,
+   "correct": 3,
+   "rate": 1.0
+  },
+  "digit_mutation": {
+   "n": 10,
+   "correct": 10,
+   "rate": 1.0
+  },
+  "fabricated_amount": {
+   "n": 10,
+   "correct": 10,
+   "rate": 1.0
+  },
+  "fake_name": {
+   "n": 10,
+   "correct": 10,
+   "rate": 1.0
+  },
+  "reformat_date": {
+   "n": 3,
+   "correct": 1,
+   "rate": 0.333
+  },
+  "reorder_name": {
+   "n": 9,
+   "correct": 0,
+   "rate": 0.0
+  },
+  "substr_true": {
+   "n": 10,
+   "correct": 5,
+   "rate": 0.5
+  },
+  "unit_swap": {
+   "n": 3,
+   "correct": 1,
+   "rate": 0.333
+  },
+  "_mean_wall_s": 0.18
+ },
+ "details": [
+  {
+   "src": "lease",
+   "class": "substr_true",
+   "entity": "Hauptstrasse 12",
+   "supported": true,
+   "expected_pass": true,
+   "verifier_correct": true,
+   "wall_s": 0.36
+  },
+  {
+   "src": "lease",
+   "class": "reorder_name",
+   "entity": "12 Hauptstrasse",
+   "supported": false,
+   "expected_pass": true,
+   "verifier_correct": false,
+   "wall_s": 0.16
+  },
+  {
+   "src": "lease",
+   "class": "reformat_date",
+   "entity": "15.06.2026",
+   "supported": false,
+   "expected_pass": true,
+   "verifier_correct": false,
+   "wall_s": 0.15
+  },
+  {
+   "src": "lease",
+   "class": "composed_date",
+   "entity": "2026-06-12",
+   "supported": false,
+   "expected_pass": false,
+   "verifier_correct": true,
+   "wall_s": 0.16
+  },
+  {
+   "src": "lease",
+   "class": "digit_mutation",
+   "entity": "2326",
+   "supported": false,
+   "expected_pass": false,
+   "verifier_correct": true,
+   "wall_s": 0.17
+  },
+  {
+   "src": "lease",
+   "class": "unit_swap",
+   "entity": "2026 EUR",
+   "supported": false,
+   "expected_pass": null,
+   "verifier_correct": true,
+   "wall_s": 0.15
+  },
+  {
+   "src": "lease",
+   "class": "fake_name",
+   "entity": "May Nebelwald",
+   "supported": false,
+   "expected_pass": false,
+   "verifier_correct": true,
+   "wall_s": 0.15
+  },
+  {
+   "src": "lease",
+   "class": "fabricated_amount",
+   "entity": "90.132 EUR",
+   "supported": false,
+   "expected_pass": false,
+   "verifier_correct": true,
+   "wall_s": 0.15
+  },
+  {
+   "src": "csv",
+   "class": "substr_true",
+   "entity": "date",
+   "supported": false,
+   "expected_pass": true,
+   "verifier_correct": false,
+   "wall_s": 0.21
+  },
+  {
+   "src": "csv",
+   "class": "reformat_date",
+   "entity": "02.06.2026",
+   "supported": true,
+   "expected_pass": true,
+   "verifier_correct": true,
+   "wall_s": 0.17
+  },
+  {
+   "src": "csv",
+   "class": "composed_date",
+   "entity": "2026-06-06",
+   "supported": false,
+   "expected_pass": false,
+   "verifier_correct": true,
+   "wall_s": 0.17
+  },
+  {
+   "src": "csv",
+   "class": "digit_mutation",
+   "entity": "4140",
+   "supported": false,
+   "expected_pass": false,
+   "verifier_correct": true,
+   "wall_s": 0.17
+  },
+  {
+   "src": "csv",
+   "class": "unit_swap",
+   "entity": "41.10 EUR",
+   "supported": true,
+   "expected_pass": null,
+   "verifier_correct": false,
+   "wall_s": 0.15
+  },
+  {
+   "src": "csv",
+   "class": "fake_name",
+   "entity": "Hetznercloud Nebelwald",
+   "supported": false,
+   "expected_pass": false,
+   "verifier_correct": true,
+   "wall_s": 0.18
+  },
+  {
+   "src": "csv",
+   "class": "fabricated_amount",
+   "entity": "99.072 EUR",
+   "supported": false,
+   "expected_pass": false,
+   "verifier_correct": true,
+   "wall_s": 0.17
+  },
+  {
+   "src": "cord:receipt_00.jpg",
+   "class": "substr_true",
+   "entity": "TICKET CP",
+   "supported": true,
+   "expected_pass": true,
+   "verifier_correct": true,
+   "wall_s": 0.24
+  },
+  {
+   "src": "cord:receipt_00.jpg",
+   "class": "reorder_name",
+   "entity": "CP TICKET",
+   "supported": false,
+   "expected_pass": true,
+   "verifier_correct": false,
+   "wall_s": 0.18
+  },
+  {
+   "src": "cord:receipt_00.jpg",
+   "class": "digit_mutation",
+   "entity": "63000",
+   "supported": false,
+   "expected_pass": false,
+   "verifier_correct": true,
+   "wall_s": 0.16
+  },
+  {
+   "src": "cord:receipt_00.jpg",
+   "class": "fake_name",
+   "entity": "Total Nebelwald",
+   "supported": false,
+   "expected_pass": false,
+   "verifier_correct": true,
+   "wall_s": 0.17
+  },
+  {
+   "src": "cord:receipt_00.jpg",
+   "class": "fabricated_amount",
+   "entity": "91893",
+   "supported": false,
+   "expected_pass": false,
+   "verifier_correct": true,
+   "wall_s": 0.16
+  },
+  {
+   "src": "cord:receipt_01.jpg",
+   "class": "substr_true",
+   "entity": "TOTAL 91000",
+   "supported": true,
+   "expected_pass": true,
+   "verifier_correct": true,
+   "wall_s": 0.21
+  },
+  {
+   "src": "cord:receipt_01.jpg",
+   "class": "reorder_name",
+   "entity": "91000 TOTAL",
+   "supported": false,
+   "expected_pass": true,
+   "verifier_correct": false,
+   "wall_s": 0.2
+  },
+  {
+   "src": "cord:receipt_01.jpg",
+   "class": "digit_mutation",
+   "entity": "76000",
+   "supported": false,
+   "expected_pass": false,
+   "verifier_correct": true,
+   "wall_s": 0.17
+  },
+  {
+   "src": "cord:receipt_01.jpg",
+   "class": "fake_name",
+   "entity": "Baso Nebelwald",
+   "supported": false,
+   "expected_pass": false,
+   "verifier_correct": true,
+   "wall_s": 0.18
+  },
+  {
+   "src": "cord:receipt_01.jpg",
+   "class": "fabricated_amount",
+   "entity": "99647",
+   "supported": false,
+   "expected_pass": false,
+   "verifier_correct": true,
+   "wall_s": 0.17
+  },
+  {
+   "src": "cord:receipt_02.jpg",
+   "class": "substr_true",
+   "entity": "TOTAL SALES 28",
+   "supported": false,
+   "expected_pass": true,
+   "verifier_correct": false,
+   "wall_s": 0.26
+  },
+  {
+   "src": "cord:receipt_02.jpg",
+   "class": "reorder_name",
+   "entity": "28 SALES TOTAL",
+   "supported": false,
+   "expected_pass": true,
+   "verifier_correct": false,
+   "wall_s": 0.16
+  },
+  {
+   "src": "cord:receipt_02.jpg",
+   "class": "digit_mutation",
+   "entity": "75000",
+   "supported": false,
+   "expected_pass": false,
+   "verifier_correct": true,
+   "wall_s": 0.16
+  },
+  {
+   "src": "cord:receipt_02.jpg",
+   "class": "fake_name",
+   "entity": "Totai Nebelwald",
+   "supported": false,
+   "expected_pass": false,
+   "verifier_correct": true,
+   "wall_s": 0.17
+  },
+  {
+   "src": "cord:receipt_02.jpg",
+   "class": "fabricated_amount",
+   "entity": "99459",
+   "supported": false,
+   "expected_pass": false,
+   "verifier_correct": true,
+   "wall_s": 0.17
+  },
+  {
+   "src": "cord:receipt_03.jpg",
+   "class": "substr_true",
+   "entity": "SUBTOTAL 11",
+   "supported": false,
+   "expected_pass": true,
+   "verifier_correct": false,
+   "wall_s": 0.21
+  },
+  {
+   "src": "cord:receipt_03.jpg",
+   "class": "reorder_name",
+   "entity": "11 SUBTOTAL",
+   "supported": false,
+   "expected_pass": true,
+   "verifier_correct": false,
+   "wall_s": 0.16
+  },
+  {
+   "src": "cord:receipt_03.jpg",
+   "class": "digit_mutation",
+   "entity": "11003",
+   "supported": false,
+   "expected_pass": false,
+   "verifier_correct": true,
+   "wall_s": 0.16
+  },
+  {
+   "src": "cord:receipt_03.jpg",
+   "class": "fake_name",
+   "entity": "Donat Nebelwald",
+   "supported": false,
+   "expected_pass": false,
+   "verifier_correct": true,
+   "wall_s": 0.17
+  },
+  {
+   "src": "cord:receipt_03.jpg",
+   "class": "fabricated_amount",
+   "entity": "99446",
+   "supported": false,
+   "expected_pass": false,
+   "verifier_correct": true,
+   "wall_s": 0.16
+  },
+  {
+   "src": "funsd:82092117.png",
+   "class": "substr_true",
+   "entity": "IF YOU DO NOT RECEIVE ANY OF THE PAGES PROPERLY",
+   "supported": true,
+   "expected_pass": true,
+   "verifier_correct": true,
+   "wall_s": 0.27
+  },
+  {
+   "src": "funsd:82092117.png",
+   "class": "reorder_name",
+   "entity": "PROPERLY PAGES THE OF ANY RECEIVE NOT DO YOU IF",
+   "supported": false,
+   "expected_pass": true,
+   "verifier_correct": false,
+   "wall_s": 0.18
+  },
+  {
+   "src": "funsd:82092117.png",
+   "class": "digit_mutation",
+   "entity": "644",
+   "supported": false,
+   "expected_pass": false,
+   "verifier_correct": true,
+   "wall_s": 0.17
+  },
+  {
+   "src": "funsd:82092117.png",
+   "class": "fake_name",
+   "entity": "Pages Nebelwald",
+   "supported": false,
+   "expected_pass": false,
+   "verifier_correct": true,
+   "wall_s": 0.17
+  },
+  {
+   "src": "funsd:82092117.png",
+   "class": "fabricated_amount",
+   "entity": "98381",
+   "supported": false,
+   "expected_pass": false,
+   "verifier_correct": true,
+   "wall_s": 0.17
+  },
+  {
+   "src": "funsd:82200067_0069.png",
+   "class": "substr_true",
+   "entity": "Maid-O-Clover 20",
+   "supported": false,
+   "expected_pass": true,
+   "verifier_correct": false,
+   "wall_s": 0.41
+  },
+  {
+   "src": "funsd:82200067_0069.png",
+   "class": "reorder_name",
+   "entity": "20 Maid-O-Clover",
+   "supported": false,
+   "expected_pass": true,
+   "verifier_correct": false,
+   "wall_s": 0.19
+  },
+  {
+   "src": "funsd:82200067_0069.png",
+   "class": "digit_mutation",
+   "entity": "425",
+   "supported": false,
+   "expected_pass": false,
+   "verifier_correct": true,
+   "wall_s": 0.17
+  },
+  {
+   "src": "funsd:82200067_0069.png",
+   "class": "fake_name",
+   "entity": "Seattle Nebelwald",
+   "supported": false,
+   "expected_pass": false,
+   "verifier_correct": true,
+   "wall_s": 0.18
+  },
+  {
+   "src": "funsd:82200067_0069.png",
+   "class": "fabricated_amount",
+   "entity": "99689",
+   "supported": false,
+   "expected_pass": false,
+   "verifier_correct": true,
+   "wall_s": 0.17
+  },
+  {
+   "src": "funsd:82250337_0338.png",
+   "class": "substr_true",
+   "entity": "EFFECTIVENESS OF P",
+   "supported": false,
+   "expected_pass": true,
+   "verifier_correct": false,
+   "wall_s": 0.35
+  },
+  {
+   "src": "funsd:82250337_0338.png",
+   "class": "reorder_name",
+   "entity": "P OF EFFECTIVENESS",
+   "supported": false,
+   "expected_pass": true,
+   "verifier_correct": false,
+   "wall_s": 0.17
+  },
+  {
+   "src": "funsd:82250337_0338.png",
+   "class": "digit_mutation",
+   "entity": "651",
+   "supported": false,
+   "expected_pass": false,
+   "verifier_correct": true,
+   "wall_s": 0.17
+  },
+  {
+   "src": "funsd:82250337_0338.png",
+   "class": "fake_name",
+   "entity": "New Nebelwald",
+   "supported": false,
+   "expected_pass": false,
+   "verifier_correct": true,
+   "wall_s": 0.18
+  },
+  {
+   "src": "funsd:82250337_0338.png",
+   "class": "fabricated_amount",
+   "entity": "98880",
+   "supported": false,
+   "expected_pass": false,
+   "verifier_correct": true,
+   "wall_s": 0.17
+  },
+  {
+   "src": "docpage",
+   "class": "substr_true",
+   "entity": "Phase 3",
+   "supported": true,
+   "expected_pass": true,
+   "verifier_correct": true,
+   "wall_s": 0.28
+  },
+  {
+   "src": "docpage",
+   "class": "reorder_name",
+   "entity": "3 Phase",
+   "supported": false,
+   "expected_pass": true,
+   "verifier_correct": false,
+   "wall_s": 0.15
+  },
+  {
+   "src": "docpage",
+   "class": "reformat_date",
+   "entity": "05.07.2026",
+   "supported": false,
+   "expected_pass": true,
+   "verifier_correct": false,
+   "wall_s": 0.17
+  },
+  {
+   "src": "docpage",
+   "class": "composed_date",
+   "entity": "2026-07-03",
+   "supported": false,
+   "expected_pass": false,
+   "verifier_correct": true,
+   "wall_s": 0.16
+  },
+  {
+   "src": "docpage",
+   "class": "digit_mutation",
+   "entity": "51735",
+   "supported": false,
+   "expected_pass": false,
+   "verifier_correct": true,
+   "wall_s": 0.14
+  },
+  {
+   "src": "docpage",
+   "class": "unit_swap",
+   "entity": "217.35 EUR",
+   "supported": true,
+   "expected_pass": null,
+   "verifier_correct": false,
+   "wall_s": 0.14
+  },
+  {
+   "src": "docpage",
+   "class": "fake_name",
+   "entity": "Embedding Nebelwald",
+   "supported": false,
+   "expected_pass": false,
+   "verifier_correct": true,
+   "wall_s": 0.15
+  },
+  {
+   "src": "docpage",
+   "class": "fabricated_amount",
+   "entity": "97.259 EUR",
+   "supported": false,
+   "expected_pass": false,
+   "verifier_correct": true,
+   "wall_s": 0.15
+  }
+ ]
+}

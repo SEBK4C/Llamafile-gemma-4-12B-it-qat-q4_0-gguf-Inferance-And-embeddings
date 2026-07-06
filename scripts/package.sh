@@ -32,6 +32,10 @@ CUDA_DSO="${ROOT}/models/ggml-cuda.so"
 # web UI read-aloud with no sidecar. See voice/BAKED-VOICE.md.
 VOICE_APE="${ROOT}/models/tts-server.ape"
 VOICE_GGUF="${ROOT}/models/kokoro.gguf"
+# Baked embeddings (optional, v0.6.0): a small text-embedding GGUF stored as
+# /zip/embed-model.gguf. The server re-spawns itself with it (--embeddings
+# --pooling last, CPU) and proxies /embed/* — see docs/embeddings.md.
+EMBED_GGUF="${ROOT}/models/embed-model.gguf"
 OUT="${ROOT}/dist/gemma4-server.llamafile"
 
 for f in "${ROOT}/bin/llamafile" "${ROOT}/bin/zipalign"; do
@@ -67,6 +71,11 @@ if [ -f "$VOICE_APE" ] && [ -f "$VOICE_GGUF" ]; then
     EXTRA="$EXTRA $VOICE_APE $VOICE_GGUF ${ROOT}/voice/voice-watchdog.sh"
 else
     echo "note: voice payload missing — packaging without baked read-aloud"
+fi
+if [ -f "$EMBED_GGUF" ]; then
+    EXTRA="$EXTRA $EMBED_GGUF"
+else
+    echo "note: $EMBED_GGUF missing — packaging without baked embeddings"
 fi
 # ui-config.json holds the default WebUI settings (system prompt + sampler);
 # referenced by --ui-config-file /zip/ui-config.json in .args (a file avoids the

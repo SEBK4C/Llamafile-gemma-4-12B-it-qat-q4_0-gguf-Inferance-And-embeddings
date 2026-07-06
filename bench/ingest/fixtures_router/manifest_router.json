@@ -1,0 +1,61 @@
+{
+ "pdf_text.pdf": {
+  "source_type": "pdf_text",
+  "pages": [
+   {
+    "kind": "text"
+   },
+   {
+    "kind": "text"
+   }
+  ],
+  "text_must_contain": "GridPower"
+ },
+ "pdf_scan.pdf": {
+  "source_type": "pdf_scan",
+  "pages": [
+   {
+    "kind": "scan"
+   }
+  ]
+ },
+ "pdf_mixed.pdf": {
+  "source_type": "pdf_mixed",
+  "pages": [
+   {
+    "kind": "text"
+   },
+   {
+    "kind": "scan"
+   }
+  ],
+  "text_must_contain": "Invoice 2026-104"
+ },
+ "table.csv": {
+  "source_type": "csv",
+  "text_must_contain": "GridPower"
+ },
+ "notes.md": {
+  "source_type": "text",
+  "text_must_contain": "ZFS"
+ },
+ "script.py": {
+  "source_type": "code",
+  "text_must_contain": "health"
+ },
+ "photo_exif.jpg": {
+  "source_type": "image_photo",
+  "exif": {
+   "camera": "Canon EOS R5",
+   "datetime": "2026:06:28 14:22:31",
+   "gps_prefix": "52.5"
+  }
+ },
+ "fake.dng": {
+  "source_type": "image_raw"
+ },
+ "tone.wav": {
+  "source_type": "audio",
+  "duration_s": 0.5
+ }
+}

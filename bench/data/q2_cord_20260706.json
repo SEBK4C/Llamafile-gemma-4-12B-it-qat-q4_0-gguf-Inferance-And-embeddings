@@ -1,0 +1,133 @@
+{
+ "summary": {
+  "n": 10,
+  "total_in_ocr_rate": 1.0,
+  "total_pre_gate_rate": 1.0,
+  "total_post_gate_rate": 1.0,
+  "gate_false_drop_rate": 0.0,
+  "halluc_number_rate": 0.067,
+  "menu_recall_mean": 0.8
+ },
+ "rows": [
+  {
+   "receipt": "receipt_00.jpg",
+   "gt_total": "60.000",
+   "in_ocr": true,
+   "pre_gate": true,
+   "post_gate": true,
+   "false_drop": false,
+   "halluc": 0,
+   "prose_n": 1,
+   "menu_recall": 1.0,
+   "wall_s": 5.3
+  },
+  {
+   "receipt": "receipt_01.jpg",
+   "gt_total": "91000",
+   "in_ocr": true,
+   "pre_gate": true,
+   "post_gate": true,
+   "false_drop": false,
+   "halluc": 0,
+   "prose_n": 1,
+   "menu_recall": 1.0,
+   "wall_s": 4.24
+  },
+  {
+   "receipt": "receipt_02.jpg",
+   "gt_total": "28,000",
+   "in_ocr": true,
+   "pre_gate": true,
+   "post_gate": true,
+   "false_drop": false,
+   "halluc": 1,
+   "prose_n": 3,
+   "menu_recall": 0.0,
+   "wall_s": 4.94
+  },
+  {
+   "receipt": "receipt_03.jpg",
+   "gt_total": "11,000",
+   "in_ocr": true,
+   "pre_gate": true,
+   "post_gate": true,
+   "false_drop": false,
+   "halluc": 0,
+   "prose_n": 1,
+   "menu_recall": 1.0,
+   "wall_s": 3.81
+  },
+  {
+   "receipt": "receipt_04.jpg",
+   "gt_total": "174,600",
+   "in_ocr": true,
+   "pre_gate": true,
+   "post_gate": true,
+   "false_drop": false,
+   "halluc": 0,
+   "prose_n": 0,
+   "menu_recall": 1.0,
+   "wall_s": 4.96
+  },
+  {
+   "receipt": "receipt_05.jpg",
+   "gt_total": "31.000",
+   "in_ocr": true,
+   "pre_gate": true,
+   "post_gate": true,
+   "false_drop": false,
+   "halluc": 0,
+   "prose_n": 1,
+   "menu_recall": 1.0,
+   "wall_s": 5.39
+  },
+  {
+   "receipt": "receipt_06.jpg",
+   "gt_total": "46,000",
+   "in_ocr": true,
+   "pre_gate": true,
+   "post_gate": true,
+   "false_drop": false,
+   "halluc": 0,
+   "prose_n": 3,
+   "menu_recall": 1.0,
+   "wall_s": 4.33
+  },
+  {
+   "receipt": "receipt_07.jpg",
+   "gt_total": "111,000",
+   "in_ocr": true,
+   "pre_gate": true,
+   "post_gate": true,
+   "false_drop": false,
+   "halluc": 0,
+   "prose_n": 1,
+   "menu_recall": 1.0,
+   "wall_s": 4.26
+  },
+  {
+   "receipt": "receipt_08.jpg",
+   "gt_total": "50,000",
+   "in_ocr": true,
+   "pre_gate": true,
+   "post_gate": true,
+   "false_drop": false,
+   "halluc": 0,
+   "prose_n": 1,
+   "menu_recall": 0.0,
+   "wall_s": 4.09
+  },
+  {
+   "receipt": "receipt_09.jpg",
+   "gt_total": "17,000",
+   "in_ocr": true,
+   "pre_gate": true,
+   "post_gate": true,
+   "false_drop": false,
+   "halluc": 0,
+   "prose_n": 3,
+   "menu_recall": 1.0,
+   "wall_s": 4.12
+  }
+ ]
+}

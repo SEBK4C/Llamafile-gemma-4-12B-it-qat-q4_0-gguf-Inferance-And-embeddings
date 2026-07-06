@@ -1,0 +1,68 @@
+{
+ "suite": "concurrency",
+ "stamp": "20260705-160357",
+ "base": "https://sebk4c-gemma-4-12b-it-q4.bunny-sunfish.ts.net",
+ "n_predict": 128,
+ "reps": 2,
+ "levels": [
+  1,
+  2,
+  4,
+  8
+ ],
+ "verdict": "SERIALIZED (single slot)",
+ "rows": [
+  {
+   "concurrency": 1,
+   "n_ok": 1,
+   "n_err": 0,
+   "batch_wall_s": 0.881,
+   "req_p50_s": 0.881,
+   "req_min_s": 0.881,
+   "req_max_s": 0.881,
+   "agg_tok_s": 145.3,
+   "per_req_tok_s": 145.3,
+   "errors": [],
+   "speedup": 1.0
+  },
+  {
+   "concurrency": 2,
+   "n_ok": 2,
+   "n_err": 0,
+   "batch_wall_s": 1.29,
+   "req_p50_s": 0.999,
+   "req_min_s": 0.708,
+   "req_max_s": 1.29,
+   "agg_tok_s": 198.5,
+   "per_req_tok_s": 128.1,
+   "errors": [],
+   "speedup": 1.37
+  },
+  {
+   "concurrency": 4,
+   "n_ok": 4,
+   "n_err": 0,
+   "batch_wall_s": 2.561,
+   "req_p50_s": 1.537,
+   "req_min_s": 0.624,
+   "req_max_s": 2.561,
+   "agg_tok_s": 199.9,
+   "per_req_tok_s": 81.8,
+   "errors": [],
+   "speedup": 1.38
+  },
+  {
+   "concurrency": 8,
+   "n_ok": 8,
+   "n_err": 0,
+   "batch_wall_s": 5.532,
+   "req_p50_s": 3.151,
+   "req_min_s": 0.59,
+   "req_max_s": 5.531,
+   "agg_tok_s": 185.1,
+   "per_req_tok_s": 41.0,
+   "errors": [],
+   "speedup": 1.27
+  }
+ ]
+}

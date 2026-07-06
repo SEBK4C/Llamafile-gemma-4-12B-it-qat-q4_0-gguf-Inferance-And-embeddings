@@ -9,8 +9,45 @@ one set of weights in memory, one KV cache, one port:
 | Endpoint | What it does |
 |---|---|
 | `POST /v1/chat/completions` | OpenAI-style chat (Gemma 4 chat template, thinking channel in `reasoning_content`) — accepts text, **images** (`image_url` data URIs) and **audio** (`input_audio`, wav/mp3) |
-| `POST /v1/embeddings` | OpenAI-style embeddings (3840-dim, mean-pooled, L2-normalized) |
+| `POST /v1/embeddings` | **v0.6.1: semantically useful by default.** With the baked [Qwen3-Embedding-0.6B](https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF) present (it is, in the packaged file), this OpenAI endpoint transparently serves the sidecar's **1024-dim retrieval-grade vectors** — every OpenAI client gets good embeddings with zero config. Best use: embed documents bare; prefix queries with `Instruct: <task>\nQuery: ` (measured +2.7% for domain phrasing, **−17% if you skip the instruction**; see [docs/embeddings.md](docs/embeddings.md)). The 12B's raw pooled output (3840-dim, anisotropic — unrelated pairs can score higher than related; kept for research) is available per-request via header `X-Raw-Embeddings: 1`, or globally with `LLAMAFILE_NO_EMBED=1`. For OCR/STT + enrichment JSON + vectors in one call, use `POST /v1/ingest`. |
 | `GET /health`, `POST /tokenize`, … | usual llama-server extras |
+
+## What's new in v0.6.0 — embeddings and ingest, baked in ([full changelog](CHANGELOG.md))
+
+**A real embedding model inside the file.** The APE now carries
+[Qwen3-Embedding-0.6B](https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF)
+(Apache-2.0, 1024-dim, Matryoshka-truncatable) and re-spawns **itself** as a
+supervised CPU embedding sidecar on startup, reverse-proxied at
+`/embed/v1/embeddings`, `/embed/health` and `/embed/tokenize`. No systemd
+unit, no second download — one file serves chat *and* semantically useful
+embeddings. (v0.6.1: the main `/v1/embeddings` endpoint now serves these
+sidecar vectors **by default** — no client changes needed; the 12B's raw
+anisotropic output is still reachable via `X-Raw-Embeddings: 1`. Measured
+comparison: [docs/embeddings.md](docs/embeddings.md).) Opt out entirely
+with `LLAMAFILE_NO_EMBED=1`.
+
+**`POST /v1/ingest` — text in, retrieval-ready JSON out.** The document
+pipeline developed in [bench/ingest/](bench/ingest/) runs *inside* the
+server for text input: one grammar-constrained enrichment call (title,
+summary, entities, task domain, chunking hints — valid JSON by
+construction), a **deterministic fidelity gate** that drops entities not
+grounded in the source (composed dates and mutated numbers never reach your
+index; strict date-tuple and digit matching), token-budgeted chunking, and
+1024-dim embeddings for the document and every chunk — returned as one
+`ingest.v1` envelope for hybrid BM25 + vector indexing. File/PDF/audio
+ingest with OCR runs in the companion Python worker
+([bench/ingest/ingest_worker.py](bench/ingest/ingest_worker.py)) until the
+OCR runtime is APE-portable.
+
+Quality numbers behind this release (all reproducible from
+[bench/](bench/), data on the
+[HF bench dataset](https://huggingface.co/datasets/SEBK4C/gemma4-serving-bench-data)):
+enrichment schema-validity 6/6 first-try with the prompt-injection probe
+resisted; labeled CORD-v2 receipts: key-field recall 100% end-to-end, gate
+false-drop 0%, hallucinated-number rate 6.7% (flag-only); Flickr30k people
+photos findable by caption through enrichment text at hit@1 0.857; native
+STT WER 3.0% on LibriSpeech test-clean (16 kHz mono — the audio encoder is
+speech-only, see the research history).
 
 ## What's new in v0.2.0 — GPU + voice ([full changelog](CHANGELOG.md))
 
@@ -62,6 +99,40 @@ make package
 ./dist/gemma4-server.llamafile --port 9000   # CLI args override baked-in ones
 ```
 
+### WebUI default system prompt — jailbreak-hardened
+
+The WebUI ships a distilled Claude's-Constitution system prompt (honest,
+calibrated, corrects false premises, treats you as a capable adult) **plus an
+explicit override-decline clause**. In a powered A/B (6 jailbreak + 6 benign-edgy
+probes × 4 reps, GLM-5.2 judge) the clause lifts jailbreak-decline from **0.75 to
+1.00 at zero over-refusal cost**, with no quality regression on the full battery
+([bench/RESEARCH_HISTORY.md](bench/RESEARCH_HISTORY.md) E14/E15). It is a
+**WebUI-only default** (seeded per new conversation) — raw `/v1` API requests are
+unaffected. Candidate + evidence: `bench/candidates/decline.json`.
+
+### Serving it well
+
+**[docs/SERVING_GUIDE.md](docs/SERVING_GUIDE.md)** distills 20 iterations of
+end-to-end measurement into one actionable page: endpoints, sampler/system-prompt
+defaults, the empty-response footgun and its fix, the full latency model
+(prefill / caching / decode), concurrency, embeddings, and agent setup — each
+claim linked to the experiment that established it.
+
+### Test your hardware in one command
+
+```sh
+python3 bench/api_probe.py --base http://127.0.0.1:8080
+```
+
+19 end-to-end tests across every endpoint and modality — chat (plain + SSE),
+Anthropic `/v1/messages`, the Responses API, embeddings, **vision**,
+**audio-in**, **TTS** — each with wall-clock speed on *your* hardware.
+Stdlib-only, no installs. `--quick` skips the media tests; add
+`--embed-base http://127.0.0.1:8081` if you run the
+[embedding sidecar](docs/embeddings.md); `--out bench/data` writes JSON/TSV
+reports. Test protocol, charts and all runs:
+[bench/](bench/) · [test-data repo on HF](https://huggingface.co/datasets/SEBK4C/gemma4-serving-bench-data).
+
 ### Talking to it
 
 ```sh
@@ -70,6 +141,14 @@ curl http://127.0.0.1:8080/v1/chat/completions -H 'Content-Type: application/jso
 
 curl http://127.0.0.1:8080/v1/embeddings -H 'Content-Type: application/json' \
   -d '{"input":["the sky is blue","der Himmel ist blau"]}'
+
+# v0.6.0: retrieval-grade embeddings from the baked sidecar
+curl http://127.0.0.1:8080/embed/v1/embeddings -H 'Content-Type: application/json' \
+  -d '{"input":["the sky is blue","der Himmel ist blau"]}'
+
+# v0.6.0: text -> enriched JSON + fidelity gate + chunks + vectors
+curl http://127.0.0.1:8080/v1/ingest -H 'Content-Type: application/json' \
+  -d '{"text":"Invoice 104 from GridPower: 412 kWh, total 87.40 EUR, due April 15.","name":"invoice.txt"}'
 ```
 
 Or with the zero-dependency Python client:
@@ -633,6 +712,26 @@ cp my.args .args
 ```
 
 The trailing `...` line means command-line flags still override baked ones.
+
+## Agent integrations (tested end-to-end)
+
+> ⚠️ **Set expectations first: Gemma 4 12B is NOT a top coding model.** These
+> harnesses run real agentic loops against this server and complete small,
+> well-scoped tasks at interactive speed, fully offline — that is the point.
+> Do not expect frontier-model software engineering from a 12B QAT-Q4 model:
+> keep tasks tight, cap turns, review every diff.
+
+| Harness | API surface | Status | Guide |
+|---|---|---|---|
+| **Claude Code** 2.1.201 | Anthropic `/v1/messages` (native — no shim) | ✅ e2e: multi-turn file+run tasks, 9.6–12.5 s | [docs/integrations/claude-code.md](docs/integrations/claude-code.md) |
+| **OpenCode** 1.17.13 | OpenAI `/v1/chat/completions` + function calling | ✅ e2e: same tasks, 8–12 s | [docs/integrations/opencode.md](docs/integrations/opencode.md) |
+| **OpenClaw** 2026.6.11 | `openai-completions` provider | ✅ e2e: chat + exec-tool turns, 7–11 s | [docs/integrations/openclaw.md](docs/integrations/openclaw.md) |
+| **Cline / Kilo Code** | OpenAI-compatible (VS Code GUI) | ⚙️ config verified at API level (GUI not automated) | [docs/integrations/cline-kilo.md](docs/integrations/cline-kilo.md) |
+
+Every ✅ was verified end-to-end with independently checked artifacts before
+its guide was published — protocol and raw results in
+[bench/RESEARCH_HISTORY.md](bench/RESEARCH_HISTORY.md) (E8–E11), data + charts in the
+[HF test-data repo](https://huggingface.co/datasets/SEBK4C/gemma4-serving-bench-data).
 
 ## Credits
 
