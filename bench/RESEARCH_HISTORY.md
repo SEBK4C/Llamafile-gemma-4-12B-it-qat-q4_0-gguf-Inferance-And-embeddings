@@ -1483,3 +1483,32 @@ loop). VARIETY/EM/Q backlog resumes post-release.
   batch size and full modality diversity. Remaining before I9 (the phase
   gate): EM2, Q4, and the hybrid store itself. v0.6.0 publish still
   awaits the prod-pause go.
+
+## I9 ✅ PHASE GATE GREEN (2026-07-06) — hybrid retrieval over the real
+## multimodal population
+- **Store**: `hybrid_store.py` — SQLite FTS5 (true BM25, stdlib, zero new
+  services) over enrichment text + transcripts + chunks, dense doc-summary
+  vectors from the live sidecar in a numpy sidecar file. Explicitly the
+  MEASUREMENT rig: envelopes carry everything, so swapping in Qdrant or
+  pgvector later is an ops change, not a contract change.
+- **Frozen query set** (42 queries with known-correct targets over the 87
+  envelopes): Flickr photos by held-out caption, CORD receipts by labeled
+  total (+item), fixtures by hand-written fact queries, LibriSpeech audio
+  by a distinctive transcript phrase.
+- **THE GATE NUMBERS**: dense **hit@1 0.881 · hit@3 0.976 · MRR 0.933**;
+  BM25 0.833/0.952/0.892; RRF-60 hybrid 0.857/0.952/0.909. The
+  architecture's end-to-end claim — ANY modality in, findable by natural
+  language out — is demonstrated on real data: a photo of a man in an
+  orange hat, a 60.000-IDR receipt, a spoken-theology sentence and a
+  SEPA-invoice PDF all retrieved from one text vector space.
+- **Finding (EM6's motivating data)**: naive equal-weight RRF k=60 HURTS
+  — fusion drags dense (0.881) toward BM25 (0.833), landing at 0.857.
+  On an enrichment-normalized corpus, dense is already strong and BM25's
+  errors are correlated with hard cases, not complementary. EM6 = learn
+  the fusion weighting (dense-favored RRF, or reserve BM25 for
+  exact-token classes: IDs, codes, amounts). Until then the query router
+  default is DENSE-first.
+- **Phase-3 core is now demonstrably COMPLETE end-to-end** (ingest →
+  enrich → gate → chunk → embed → store → hybrid query). Remaining:
+  EM2/EM6/Q4 refinements, I10 contention doc, and the v0.6.0
+  publish — still awaiting Sebastian's prod-pause go.
