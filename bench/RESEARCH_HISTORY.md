@@ -1442,3 +1442,23 @@ loop). VARIETY/EM/Q backlog resumes post-release.
 - **NEXT (EM queue)**: EM3 MRL truncation is nearly free now (re-rank
   cached 1024-dim vectors truncated to 512/256 — no re-embedding);
   EM4 instruction sweep costs ~16 s per phrasing. Both fit single ticks.
+
+## EM3 ✅ + EM4 ✅ (2026-07-06) — MRL curve; domain instructions VALIDATED
+- **EM3 (free re-rank of cached vectors)**: 1024→0.3626, 512→0.3538
+  (−2.4% rel for half the index), 256→0.3383 (−6.7%), 128→0.3118 (−14%).
+  Ship gate not met (512 is a real regression and index size is
+  irrelevant at homelab scale) → **1024 stays default; 512 sanctioned for
+  large archives** (envelope records dims, so it's a clean migration).
+- **EM4 (5 phrasings × ~16 s each)**: generic 0.3626 · **TASK.med 0.3724
+  (+2.7% rel)** · nfcorpus-tuned 0.3750 (+3.4%, testset-flavored) ·
+  short = generic exactly · **bare 0.2999 (−17% rel!)**. Findings:
+  (1) the TASK-taxonomy domain routing the architecture already does at
+  query time is **empirically validated on a real benchmark** — the med
+  instruction beats generic on the medical corpus; (2) query-side
+  instructions are LOAD-BEARING for Qwen3 — a 21% relative swing from
+  bare to tuned, far above the 1-5% the model card suggests; a bare-query
+  path must never ship. No config change: the design already routes by
+  domain — this quantifies why. Formal per-harness ship-gate untouched.
+- **EM queue remaining**: EM2 (doc-composite fields, H-B) — needs
+  enrichment re-runs, a fuller tick; EM5/EM6 wait on I6-chunk-variants /
+  I9 store. VARIETY's 100-file batch still queued.
