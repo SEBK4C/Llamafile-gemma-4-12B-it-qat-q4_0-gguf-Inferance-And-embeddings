@@ -1,21 +1,21 @@
 diff --git a/llamafile/BUILD.mk b/llamafile/BUILD.mk
-index 6d4cbcb..b36e03c 100644
+index da2ab85..6a782b3 100644
 --- a/llamafile/BUILD.mk
 +++ b/llamafile/BUILD.mk
-@@ -125,6 +125,7 @@ LLAMAFILE_SRCS_C := \
+@@ -121,6 +121,7 @@ LLAMAFILE_HIGHLIGHT_SRCS := \
+ LLAMAFILE_SRCS_C := \
+ 	llamafile/bestline.c \
+ 	llamafile/cuda.c \
++	llamafile/embed.c \
+ 	llamafile/gpu_backend.c \
  	llamafile/llamafile.c \
  	llamafile/metal.c \
- 	llamafile/voice.c \
-+	llamafile/embed.c \
- 	llamafile/vulkan.c \
- 	llamafile/zip.c
- 
 diff --git a/llamafile/embed.c b/llamafile/embed.c
 new file mode 100644
-index 0000000..b2ca4d8
+index 0000000..ac13569
 --- /dev/null
 +++ b/llamafile/embed.c
-@@ -0,0 +1,113 @@
+@@ -0,0 +1,128 @@
 +// -*- mode:c;indent-tabs-mode:nil;c-basic-offset:4;coding:utf-8 -*-
 +// vi: set et ft=c ts=4 sts=4 sw=4 fenc=utf-8 :vi
 +#define _COSMO_SOURCE // makedirs()
@@ -71,6 +71,21 @@ index 0000000..b2ca4d8
 +    port = 0;
 +    if (getenv("LLAMAFILE_NO_EMBED"))
 +        return port;
++    // External sidecar mode (source-tree serve.sh route, no baked payload):
++    // LLAMAFILE_EMBED_PORT names an already-running embedding server; the
++    // /embed proxy and /v1/embeddings forward then work identically to the
++    // baked path. Same pattern as LLAMAFILE_TTS_PORT for voice.
++    const char *env = getenv("LLAMAFILE_EMBED_PORT");
++    if (env && *env) {
++        int p = atoi(env);
++        if (p > 0 && p < 65536) {
++            fprintf(stderr, "embed: using external embedding sidecar on "
++                            "127.0.0.1:%d (LLAMAFILE_EMBED_PORT)\n", p);
++            port = p;
++            return port;
++        }
++        fprintf(stderr, "warning: ignoring invalid LLAMAFILE_EMBED_PORT=%s\n", env);
++    }
 +    struct stat st;
 +    if (stat(EMBED_ZIP_GGUF, &st))
 +        return port; // no baked embedder in this build
@@ -129,41 +144,3 @@ index 0000000..b2ca4d8
 +                    "(LLAMAFILE_NO_EMBED=1 disables)\n", port);
 +    return port;
 +}
-diff --git a/llamafile/voice.c b/llamafile/voice.c
-index 61af87d..b396fe1 100644
---- a/llamafile/voice.c
-+++ b/llamafile/voice.c
-@@ -73,18 +73,25 @@ int llamafile_voice_start(void) {
-     char wd[PATH_MAX];
-     snprintf(wd, sizeof(wd), "%svoice-watchdog.sh", app);
-     int have_wd = llamafile_extract("/zip/voice-watchdog.sh", wd);
--    char cmd[768];
-+    // Both branches are tied to OUR pid (F25): atexit cleanup never runs on
-+    // SIGKILL, which leaked watchdog/respawn loops and stacked orphans on
-+    // the voice ports; the loops now check the parent every cycle.
-+    char cmd[1024];
-     if (have_wd) {
-         snprintf(cmd, sizeof(cmd),
--                 "( /bin/sh \"$3\" \"$1\" \"$2\" %s ) & "
--                 "( /bin/sh \"$3\" \"$1\" \"$2\" %d ) & "
--                 "wait", VOICE_PORT, atoi(VOICE_PORT) + 1);
-+                 "( /bin/sh \"$3\" \"$1\" \"$2\" %s %d ) & "
-+                 "( /bin/sh \"$3\" \"$1\" \"$2\" %d %d ) & "
-+                 "wait", VOICE_PORT, (int) getpid(), atoi(VOICE_PORT) + 1, (int) getpid());
-     } else {
-         snprintf(cmd, sizeof(cmd),
--                 "NP=\"nice -n -5\"; command -v nice >/dev/null 2>&1 || NP=\"\"; "
--                 "( while :; do $NP /bin/sh \"$1\" -mp \"$2\" --port %s; sleep 2; done ) & "
--                 "( while :; do $NP /bin/sh \"$1\" -mp \"$2\" --port %d; sleep 2; done ) & "
--                 "wait", VOICE_PORT, atoi(VOICE_PORT) + 1);
-+                 "NP=\"nice -n -5\"; command -v nice >/dev/null 2>&1 || NP=\"\"; P=%d; "
-+                 "( while kill -0 $P 2>/dev/null; do $NP /bin/sh \"$1\" -mp \"$2\" --port %s & C=$!; "
-+                 "while kill -0 $C 2>/dev/null && kill -0 $P 2>/dev/null; do sleep 2; done; "
-+                 "kill -0 $P 2>/dev/null || kill $C 2>/dev/null; sleep 2; done ) & "
-+                 "( while kill -0 $P 2>/dev/null; do $NP /bin/sh \"$1\" -mp \"$2\" --port %d & C=$!; "
-+                 "while kill -0 $C 2>/dev/null && kill -0 $P 2>/dev/null; do sleep 2; done; "
-+                 "kill -0 $P 2>/dev/null || kill $C 2>/dev/null; sleep 2; done ) & "
-+                 "wait", (int) getpid(), VOICE_PORT, atoi(VOICE_PORT) + 1);
-     }
-     char *argv[] = {"/bin/sh", "-c", cmd, "g4voice", ape, gguf, wd, (char *)0};
-     extern char **environ;

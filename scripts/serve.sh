@@ -93,7 +93,13 @@ UI_ARGS=""
 # LLM for the GPU. It outlives this script's exec as an orphan; use
 # voice/voice-watchdog.sh for supervised deployments.
 TTS_BIN="${ROOT}/bin/tts-server"
-TTS_MODEL="${ROOT}/models/Kokoro_no_espeak_Q4.gguf"
+# Prefer the espeak-ng-backed Kokoro: the no_espeak GGUF's built-in G2P
+# garbles real words ("specific" -> "specificus"; roundtrip-verified
+# 2026-07-06 via tests/tts_roundtrip.py). The espeak build needs
+# `brew install espeak-ng`; the no_espeak GGUF remains the zero-dependency
+# fallback.
+TTS_MODEL="${ROOT}/models/Kokoro_espeak_Q4.gguf"
+[ -f "$TTS_MODEL" ] || TTS_MODEL="${ROOT}/models/Kokoro_no_espeak_Q4.gguf"
 if [ "${GEMMA4_TTS:-1}" = "1" ] && [ -x "$TTS_BIN" ] && [ -f "$TTS_MODEL" ]; then
     TTS_PORT="${GEMMA4_TTS_PORT:-8091}"
     if ! curl -s -o /dev/null "http://127.0.0.1:${TTS_PORT}/health" 2>/dev/null; then
@@ -122,9 +128,37 @@ if [ "${GEMMA4_TTS:-1}" = "1" ] && [ -x "$TTS_BIN" ] && [ -f "$TTS_MODEL" ]; the
     export LLAMAFILE_TTS_PORT
 fi
 
+# Embeddings sidecar (v0.6 parity for the source-tree route): run this same
+# llamafile binary with the Qwen3-Embedding GGUF, CPU-only, and point the
+# server's /embed proxy + transparent /v1/embeddings forward at it via
+# LLAMAFILE_EMBED_PORT (llamafile/embed.c). Args mirror the baked sidecar
+# (embed.c): --pooling last needs fork patch 0019. GEMMA4_EMBED=0 disables.
+EMBED_GGUF="${ROOT}/models/embed-model.gguf"
+if [ "${GEMMA4_EMBED:-1}" = "1" ] && [ -f "$EMBED_GGUF" ]; then
+    EMBED_PORT="${GEMMA4_EMBED_PORT:-8081}"
+    if ! curl -s -o /dev/null "http://127.0.0.1:${EMBED_PORT}/health" 2>/dev/null; then
+        "$BIN" --server -m "$EMBED_GGUF" --embeddings --pooling last \
+            --host 127.0.0.1 --port "$EMBED_PORT" -ngl 0 --spec-type none \
+            --no-mmproj -c 4096 -ub 512 -np 2 >/dev/null 2>&1 &
+        echo "embed: started Qwen3-Embedding sidecar on 127.0.0.1:${EMBED_PORT}" >&2
+    fi
+    LLAMAFILE_EMBED_PORT="$EMBED_PORT"
+    export LLAMAFILE_EMBED_PORT
+fi
+
+# Server-wide sampler defaults — same recipe the packaged .args bake
+# (v0.5.0 ship: Gemma 4 official sampler + DRY anti-loop). Without these the
+# source-tree route runs llama.cpp stock defaults, where greedy-ish sampling
+# spirals in the thinking channel and /v1 requests that omit sampler params
+# return EMPTY content (caught by api_probe chat_completions on Mac).
+SAMPLER_ARGS="--temp 1.0 --top-k 64 --top-p 0.95 --min-p 0.01 \
+--dry-multiplier 0.8 --dry-base 1.75 --dry-allowed-length 2 \
+--dry-penalty-last-n -1 --repeat-penalty 1.0"
+
 exec "$BIN" --server \
     $SPEC_ARGS \
     $UI_ARGS \
+    $SAMPLER_ARGS \
     --ctx-checkpoints "${GEMMA4_CKPT:-0}" \
     --slot-save-path "$KV_DIR" \
     -m "$MODEL" \
