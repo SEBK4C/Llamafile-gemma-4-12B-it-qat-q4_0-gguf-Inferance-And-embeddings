@@ -1547,6 +1547,23 @@ loop). VARIETY/EM/Q backlog resumes post-release.
   opinion rejected with measurements, Q5 policy = shipped drop/flag
   defaults. Every checker in the stack has a measured catch-rate.
 
+## I10/capstone ✅ (2026-07-06) — INGEST_GUIDE.md; autonomous queue EXHAUSTED
+- `docs/INGEST_GUIDE.md` distills the phase into one actionable page:
+  architecture rationale (mm-embedding dead end → text normalization),
+  the four surfaces (APE /v1/ingest, python worker, hybrid store, embed
+  sidecar), every measured number with its ledger row, the load-bearing
+  defaults (query-side TASK instructions, composite-F doc vectors,
+  dense-first router, 1024 dims, temp0+DRY+thinking-off enrichment), the
+  F16–F26 footgun list, and reproduce commands. Deliberate capstone, not
+  a new experiment — the phase-2 iteration-21 pattern repeated.
+- **The autonomous queue is exhausted.** I1-I10, I13-I14, T1, P1-P4,
+  Q1-Q5, EM1-EM4/EM6, VARIETY and the I9 gate are all closed with
+  published data. Every remaining item requires Sebastian:
+  (1) the ~4-min prod pause → full-CUDA battery → v0.6.0 tag + GitHub
+  release + HF binary upload + README live; (2) Mac e2e (his hardware);
+  (3) optional deploy of the v6 APE to CT 118 (retiring embed.service).
+  The loop will idle-tick against this list until the go arrives.
+
 - **Phase-3 core is now demonstrably COMPLETE end-to-end** (ingest →
   enrich → gate → chunk → embed → store → hybrid query). Remaining:
   EM2/EM6/Q4 refinements, I10 contention doc, and the v0.6.0
