@@ -1587,6 +1587,29 @@ loop). VARIETY/EM/Q backlog resumes post-release.
   (`/proc/<pid>/root` → CT rootfs?) first. fuser -k on host-owned ports
   remains safe; process-name sweeps are not.
 
+## v0.6.0 RELEASED (2026-07-06, Sebastian's GO) — the build directive is done
+- **CUDA e2e**: prod paused 2 m 07 s (07:23:17→07:25:24 UTC, under the
+  4-6 min promise). Full offload healthy in 12 s at 11 GB (prod
+  footprint). Probe: **19 PASS** / 1 expected-FAIL (F9, documented) /
+  1 legacy-skip in 15.7 s. Chat **105.5 tok/s** (prod band). `/v1/ingest`
+  **1.97 s** on GPU, fidelity 5/5. The probe's audio "FAIL" was verified
+  to be its own thinking-budget artifact (H8): direct audio-in with
+  `enable_thinking:false` transcribes LibriSpeech verbatim in 0.66 s.
+  Teardown was PID/port-scoped (INC-1 rule held); prod restored and
+  verified across main/tts/embed.
+- **Published**: GitHub release v0.6.0 + tag + main fast-forwarded
+  (README with the v6 section + INGEST_GUIDE + final release notes all
+  live); HF model repo carries the 8.63 GB v0.6.0 binary (xet) and the
+  refreshed model card with the v6 section.
+- **The /loop build directive is COMPLETE** (build ✓ embeddings endpoint ✓
+  /ingest ✓ all models zipped ✓ CUDA e2e ✓ README on GitHub+HF ✓; "all
+  APE by default" held throughout). The 30-min build cron is retired.
+  NEXT per the directive: **Mac e2e** — needs Sebastian's hardware; the
+  binary is cosmocc multi-arch with Metal baked, so it's a
+  download-and-run test. OPTIONAL follow-up for Sebastian: deploy v6 to
+  CT 118 (drop ExecStart overrides that force the old sidecar layout,
+  retire embed.service — the baked sidecar takes :8081).
+
 - **Phase-3 core is now demonstrably COMPLETE end-to-end** (ingest →
   enrich → gate → chunk → embed → store → hybrid query). Remaining:
   EM2/EM6/Q4 refinements, I10 contention doc, and the v0.6.0
