@@ -121,24 +121,44 @@ def evaluate(db_path, embed_base, out_path):
         except sqlite3.OperationalError:
             return []
 
+    def has_exact_tokens(qtext):
+        # digits, ids, amounts — the class BM25 is kept for (EM6 router)
+        return any(ch.isdigit() for ch in qtext)
+
+    def ranked(mode, qi, qt):
+        bm = fts_rank(qt)
+        dn = list(np.argsort(-S[qi]))
+        if mode == "bm25":
+            return bm or dn
+        if mode == "dense":
+            return dn
+        if mode.startswith("rrf"):  # rrf[:wd:wb:k]
+            _, wd, wb, k = mode.split(":")
+            wd, wb, k = float(wd), float(wb), int(k)
+            sc = {}
+            for r, d in enumerate(bm):
+                sc[d] = sc.get(d, 0) + wb / (k + r + 1)
+            for r, d in enumerate(dn[:100]):
+                sc[d] = sc.get(d, 0) + wd / (k + r + 1)
+            return sorted(sc, key=sc.get, reverse=True)
+        if mode == "router":  # EM6: dense-first; fuse BM25 only on exact-token queries
+            if not has_exact_tokens(qt):
+                return dn
+            sc = {}
+            for r, d in enumerate(bm):
+                sc[d] = sc.get(d, 0) + 1.0 / (60 + r + 1)
+            for r, d in enumerate(dn[:100]):
+                sc[d] = sc.get(d, 0) + 3.0 / (60 + r + 1)
+            return sorted(sc, key=sc.get, reverse=True)
+        raise ValueError(mode)
+
     res = {}
-    for mode in ("bm25", "dense", "rrf"):
+    for mode in ("bm25", "dense", "rrf:1:1:60", "rrf:2:1:60", "rrf:3:1:60",
+                 "rrf:5:1:60", "rrf:3:1:20", "router"):
         hit1 = hit3 = 0
         mrr = 0.0
         for qi, (qt, tgt) in enumerate(queries):
-            bm = fts_rank(qt)
-            dn = list(np.argsort(-S[qi]))
-            if mode == "bm25":
-                order = bm or dn
-            elif mode == "dense":
-                order = dn
-            else:  # RRF k=60
-                sc = {}
-                for r, d in enumerate(bm):
-                    sc[d] = sc.get(d, 0) + 1.0 / (60 + r + 1)
-                for r, d in enumerate(dn[:100]):
-                    sc[d] = sc.get(d, 0) + 1.0 / (60 + r + 1)
-                order = sorted(sc, key=sc.get, reverse=True)
+            order = ranked(mode, qi, qt)
             t = name_to_idx[tgt]
             rank = order.index(t) + 1 if t in order else len(names) + 1
             hit1 += rank == 1
@@ -147,7 +167,7 @@ def evaluate(db_path, embed_base, out_path):
         n = len(queries)
         res[mode] = {"hit@1": round(hit1 / n, 3), "hit@3": round(hit3 / n, 3),
                       "mrr": round(mrr / n, 3)}
-        print(f"{mode:6s} hit@1={res[mode]['hit@1']:.3f} hit@3={res[mode]['hit@3']:.3f} mrr={res[mode]['mrr']:.3f}")
+        print(f"{mode:12s} hit@1={res[mode]['hit@1']:.3f} hit@3={res[mode]['hit@3']:.3f} mrr={res[mode]['mrr']:.3f}")
     if out_path:
         json.dump({"n_queries": len(queries), "n_docs": len(names), "modes": res},
                   open(out_path, "w"), indent=1)
