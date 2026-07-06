@@ -1376,3 +1376,24 @@ loop). VARIETY/EM/Q backlog resumes post-release.
   When given: stop gemma.service → GPU battery (chat tok/s + probe +
   /embed + /v1/ingest on GPU) → restart → verify → tag v0.6.0 → GitHub
   release + HF binary upload + README sync. Everything else is done.
+
+## V6 tick 4 ✅ (2026-07-06) — F25 closed for voice; RELEASE READY
+- **voice.c + voice-watchdog.sh parent-liveness-tied** (commit 404d904):
+  the watchdog takes the main server's pid as `$4` — its outer loop
+  requires a living parent, and the wedge-check inner loop kills the
+  instance and exits the moment the parent dies; the no-watchdog fallback
+  branch got the same background-child + dual-liveness pattern as
+  embed.c. Legacy behaviour preserved when `$4` is absent.
+- **Validated the way F25 was found**: `kill -9` of the main server →
+  **0 listeners on 8078/8079/8081 and 0 supervisor processes** at +26 s
+  (voice watchdog polls at 10 s cadence, hence the longer window than
+  embed's 6 s). Release notes' known-issue struck through as fixed.
+- **Final battery on the tick-4 binary: 17 PASS / 1 expected-FAIL /
+  1 SKIP** — unchanged, no regressions from the supervision rework.
+- **State: the v0.6.0 artifact is DONE** — baked chat + vision + audio +
+  voice + embeddings + /v1/ingest, all supervised sidecars lifetime-safe,
+  8.63 GB, probe-verified. Remaining: the CUDA battery in a prod-pause
+  window (Sebastian's go) → tag → GitHub release → HF upload → README
+  live. Mac e2e starts after publish per the directive; the APE is
+  all-platform by construction (cosmocc multi-arch + Metal/CUDA/CPU
+  backends baked).
