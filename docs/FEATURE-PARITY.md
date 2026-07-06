@@ -60,8 +60,8 @@ Legend: ✅ verified (with number/date) · ⏳ expected-works, unverified ·
 | 15 | Barge-in + spoken UI commands (v0.4-alpha) | manual demo | ✅ (alpha, CT) | ⏳ browser-side code ships in injection; needs manual Mac demo pass |
 | 16 | Baked voice APE (`/zip/tts-server.ape` spawn) | packaged bare run | ✅ artifact only — **spawner source never pushed** | ❌ blocked on missing `voice.c`; Mac equivalent = external sidecar (row 12); cosmocc TTS.cpp port = open work (`voice/BAKED-VOICE.md`) |
 | 17 | Platform default args (one artifact, per-OS profiles) | bare packaged run, startup config lines | ✅ unchanged `.args` path | ✅ `.args.xnu` verified 19.9 tok/s bare (07-06) |
-| 18 | Hardware autotune (v0.3, `LLAMAFILE_NO_AUTOTUNE`) | bare run on odd hardware | ✅ artifact | ❓ source location unknown to Mac agent — superseded on Mac by #17; **CUDA agent: confirm where v0.3 autotune lives** |
-| 19 | CUDA DSO baked (TinyBLAS + 0016/0017) | packaged run on NVIDIA | ⏳ v0.7.0-universal carries the byte-identical v0.6.1 DSO — **run one CUDA smoke (api_probe) on the universal file** | ✅ DSO presence doesn't affect Metal (clean-room verified 07-07) |
+| 18 | Hardware autotune (v0.3, `LLAMAFILE_NO_AUTOTUNE`) | bare run on odd hardware | ❌ **REGRESSED in v0.7.0-universal** — smoke evidence (07-07): `--gpu nvidia` bare boot picks `n_parallel auto = 4`, no ctx cap → CUDA0 alloc fails (1.5 GB KV, then 1.0 GB compute at `-c 131072`) and the process segfaults/aborts on a 12 GB 3080 Ti. v0.6.x artifacts booted clean on the same card. Workaround: explicit `-c 65536 -np 1 -ub 256 -b 256` (or prod-style flags on ≥12 GB after freeing VRAM). Autotune was in fork `args.cpp` (v0.3) — restore it in the next universal build | ❓ superseded on Mac by #17 (`.args.xnu`) |
+| 19 | CUDA DSO baked (TinyBLAS + 0016/0017) | packaged run on NVIDIA | ✅ v0.7.0-universal verified on 3080 Ti (07-07): baked `ggml-cuda.so` byte-identical to v0.6.1 (sha `b58c2920`, 115,634,736 B); backend registers ARCHS 750/800/860/890/900/1200 + USE_GRAPHS=1; full offload 9.95 GB VRAM; **api_probe 19 PASS / 0 FAIL / 3 expected-skip**; chat **110.5 tok/s** (600-tok sustained); `/v1/embeddings` 1024-dim semantic; `/v1/ingest` 1.90 s fidelity 5/5; audio-in verbatim pangram 0.77 s (fattn 0016/0017 canary). No ABI errors — but see row 18 for the boot-flags regression | ✅ DSO presence doesn't affect Metal (clean-room verified 07-07) |
 | 20 | Duplicate-launch helper + `--clear-all` (v0.3) | launch twice / flag | ✅ artifact | ❓ same as #18 — source location unconfirmed |
 | 21 | External ingest worker (OCR/PDF/audio → Python) | `bench/ingest/ingest_worker.py` | ✅ CT deployment | ➖ CT-only by design until OCR runtime is APE-portable |
 | 22 | Serving-defaults ratchet (autoresearch ledger + gates) | `bench/serve_bench.py` / `mac_serve_bench.py` | ✅ baseline + E1–E15 | ✅ Mac baseline landed 07-06 (66.9 composite); candidate queued |
@@ -74,6 +74,7 @@ Legend: ✅ verified (with number/date) · ⏳ expected-works, unverified ·
 |---|---|---|---|
 | 2026-07-06 | CUDA (CT 118) | 19 PASS (v0.6.0 release run) | 105.5 tok/s; ingest 1.97 s |
 | 2026-07-06 | Metal (M1 Pro) | **21 PASS / 0 FAIL / 1 skip** | 91.2 s wall; ingest 15.4 s; skip = optional `--embed-base` arg |
+| 2026-07-07 | CUDA (PVE host, 3080 Ti) — **v0.7.0-universal HF artifact** | **19 PASS / 0 FAIL / 3 skip** | 11.7 s wall; 110.5 tok/s chat; ingest 1.90 s; skips = `--embed-base` + voice-not-baked ×2 (universal file has no TTS payload); boot needed explicit `-c 65536 -np 1 -ub 256 -b 256` (row 18 regression) |
 
 The one FAIL on the first Mac run (chat_completions, empty content) was a real
 parity gap — serve.sh lacked the baked sampler defaults — fixed same day.

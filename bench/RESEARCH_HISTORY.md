@@ -1631,3 +1631,38 @@ loop). VARIETY/EM/Q backlog resumes post-release.
   enrich → gate → chunk → embed → store → hybrid query). Remaining:
   EM2/EM6/Q4 refinements, I10 contention doc, and the v0.6.0
   publish — still awaiting Sebastian's prod-pause go.
+
+## v0.7.0-universal CUDA smoke ✅ (2026-07-07) — row-19 handoff closed;
+## row-18 autotune regression found
+- **Task (from the Mac agent's handoff)**: one CUDA run of the shipped HF
+  `gemma4-server.llamafile` (v0.7.0-universal = Mac build + transplanted
+  v0.6.1 CUDA DSO) to confirm ggml ABI between the new main binary and
+  the old DSO.
+- **Artifact verified before boot**: HF download sha256 `b3ed2002…` =
+  x-linked-etag (9,089,626,321 B); baked `ggml-cuda.so` byte-identical
+  to `models/ggml-cuda.so` from the v0.6.1 build (sha `b58c2920…`,
+  115,634,736 B). Host `~/.llamafile` purged pre-boot (clean DSO
+  extraction, 0.10.7 dir re-created).
+- **VERDICT: DSO/ABI GREEN.** Backend registers ARCHS
+  750/800/860/890/900/1200 + USE_GRAPHS=1, full offload (9.95 GB VRAM),
+  **api_probe 19 PASS / 0 FAIL / 3 expected-skip** in 11.7 s
+  (skips: `--embed-base` not given; tts_speech + audio_input — no voice
+  payload in the universal file). Chat **110.5 tok/s** sustained
+  (600 tok), `/v1/embeddings` 1024-dim cos(cat,kitten)=0.861>0.548,
+  `/embed/v1/*` OK, `/v1/ingest` 1.90 s fidelity 5/5, vision OK,
+  audio-in (manual, fox-pangram.wav, thinking off) verbatim in 0.77 s —
+  the 0016/0017 fattn canary passes. Zero DSO/ABI errors in the log.
+- **Regression found (parity row 18)**: the universal binary does NOT
+  run the v0.3 CUDA autotune. Bare `--gpu nvidia` boot → `n_parallel
+  auto = 4`, no ctx cap → 1.5 GB CUDA0 alloc failure + segfault; even
+  `-c 131072 -np 1` OOMs on compute buffers (ub 512 after the
+  embeddings clamp; prod's v18 APE bakes ub 256). Working smoke flags:
+  `-c 65536 -np 1 -ub 256 -b 256`. Fix for next universal build:
+  restore fork args.cpp autotune (or bake a `.args`-side CUDA cap).
+- **Ops**: v0.6.0-style prod pause, 23:13:01→23:19:23 UTC = **6 m 22 s**
+  (2 OOM boot attempts inside the window; teardown exact-PID per INC-1 —
+  embed-sidecar child reaped with parent per F25). Prod re-verified:
+  local+external /health 200, /tts/health 200, embed-engine :8081 200 +
+  vectors, gemma+embed services active, 11 GB VRAM footprint restored.
+  Note: prod (v18 APE) has no /embed proxy — 404 there is its normal
+  state, embeddings run via embed.service.
