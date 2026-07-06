@@ -2,6 +2,19 @@
 
 All notable changes to this project. Dates are 2026.
 
+## [v0.7.0] — 2026-07-07 — Mac Metal parity, voice, prewarmed first message
+
+Full v0.6.1 feature parity on Apple Silicon (api_probe 21 PASS / 0 FAIL /
+1 skip, M1 Pro): per-OS baked args (`.args.xnu`, lf-0002 — fixes the ~6 tok/s
+CUDA-tuned-defaults crawl; 19.9 tok/s bare), voice in/out (espeak-backed
+Kokoro sidecar via LLAMAFILE_TTS_PORT; pronunciation roundtrip-verified),
+embeddings/ingest on Metal (+LLAMAFILE_EMBED_PORT for the source route),
+shipped system-prompt prewarm (patch 0021; first message cache_n=310), the
+multimodal upload corpus + probe, and the standing FEATURE-PARITY /
+RELEASE-CHECKLIST process docs. Known: mic-button visibility quirk in the
+web UI; date/time audio reasoning spiral (canary clip in tests/assets).
+Full notes: release-notes-v0.7.0.md.
+
 ## [v0.4.0-alpha] — 2026-07-04 — the voice moves into the file (ALPHA)
 
 **Read-aloud is now fully baked in.** The packaged llamafile bundles a

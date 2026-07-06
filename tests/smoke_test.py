@@ -27,7 +27,9 @@ def main():
     t = time.time()
     answer = c.chat(
         [{"role": "user", "content": "Reply with exactly one word: the color of a cloudless daytime sky."}],
-        temperature=0, max_tokens=256,  # leave room for the thinking channel
+        temperature=1.0, top_k=64, top_p=0.95, max_tokens=512,
+        # temperature=0 (greedy) exhausts token budget on thinking; Gemma 4
+        # official sampler (temp=1.0/top_k=64) reliably puts answer in content.
     )
     print(f"       {answer!r}  ({time.time()-t:.1f}s)")
     assert "blue" in answer.lower(), f"unexpected chat answer: {answer!r}"
@@ -66,7 +68,7 @@ def main():
         try:
             results["chat"] = c.chat(
                 [{"role": "user", "content": "Count from 1 to 10, digits only."}],
-                temperature=0, max_tokens=512,
+                temperature=1.0, top_k=64, top_p=0.95, max_tokens=512,
             )
         except Exception as e:  # noqa: BLE001
             errors.append(("chat", e))

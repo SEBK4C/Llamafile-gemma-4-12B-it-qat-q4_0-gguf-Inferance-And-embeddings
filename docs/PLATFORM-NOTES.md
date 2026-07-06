@@ -17,9 +17,51 @@ right on one box doesn't silently break another.
 | mmproj offload (no `--no-mmproj-offload`) | ✅ vision+audio projector on GPU | n/a | ❌ Metal conv kernels assert on projector shapes — keep `--no-mmproj-offload` |
 | MTP (`--spec-type draft-mtp`) | ✅ | ⚠️ **known bug**: can abort `assert(sum > 0.0)` in `ggml-cpu/ops.cpp` (fully-masked rows in the draft-probe ubatch, upstream crash-cluster family #24376/#24457). Workaround: `--spec-type none` | ✅ per fork README (1.52× with d4c192d Metal fix) |
 | `--host 0.0.0.0` | container/server use | ⚠️ binds all interfaces — use `127.0.0.1` on laptops | same |
+| `-ub 2048` (wide ubatch) | ✅ | ✅ RAM permitting | ❌ **Metal command-buffer OOM** (`kIOGPUCommandBufferCallbackErrorOutOfMemory`, M1 Pro 32 GB) under concurrent slots — serve.sh caps to 1024 on Darwin (verified stable with ~800-token embeddings + concurrent chat) |
 
 **Rule of thumb for portable invocations** (any machine, CPU fallback):
 `-ngl 0 --gpu disable -sm layer -ctk f16 -ctv f16 --flash-attn off --spec-type none`
+
+## Platform-conditional baked defaults (.args.xnu) — 2026-07-06
+
+The tuned serving configs are not portable (this whole page is the evidence),
+so the packaged llamafile now carries **per-OS args profiles**:
+
+- `patches/lf-0002-platform-conditional-args.patch` — the launcher prefers
+  `/zip/.args.xnu` on macOS (`IsXnu()`), falling back to `/zip/.args`.
+  Linux/CUDA/BSD behavior is byte-identical to before (always `.args`).
+- `package/gemma4.args.xnu` — the Metal profile baked by `scripts/package.sh`:
+  MTP drafter on (n_max 2), `-fa on`, `-c 8192 -np 2 -b/-ub 1024`,
+  `--no-mmproj-offload`, f16 KV, the v0.5.0 sampler + `ui-config.json`.
+- `package/gemma4.args` — unchanged CUDA/default profile (plus the MTP block
+  that v0.5.0's release notes document but the args file had lost).
+
+Symptom this fixes: the packaged file on Apple Silicon ran at ~6 tok/s with a
+bare Web UI (CUDA-tuned `.args`: `-fa auto`, no context cap under `--fit off`,
+GPU-side mmproj, no MTP), vs ~21 tok/s with the Metal profile.
+
+## Apple Silicon (M1 Pro 32 GB) measured baseline — 2026-07-06
+
+Full E2E verified via `scripts/mac-full-test.sh` (llamafile 0.10.7, external GGUFs):
+
+- **Decode speed**: 21.5–22.2 tok/s at `-ngl 999 -fa on`, identical for
+  `-c 4096 -np 1` and `-c 8192 -np 2` (default ubatch). Metal window
+  reports 25.5 GB free of 32 GB.
+- **MTP is break-even on M1 Pro** despite 0.91 draft acceptance: batch-2
+  verify costs ~1.75× a single decode step (probe_batch_cost.py: 40.2 ms/tok
+  at b=2 vs ~46 ms single), which cancels the acceptance gain. The M4's 1.5×
+  speedup does NOT transfer — keep MTP on for the acceptance telemetry or
+  strip it (`build-gemma4-fast.sh`) for identical speed with less memory.
+- **Thinking-channel gotcha**: `temperature=0` + small `max_tokens` returns
+  empty `content` — the reasoning channel consumes the whole budget. Test
+  and client code must use the Gemma-4 official sampler (temp 1.0 / top_k 64 /
+  top_p 0.95) with ≥512-token budgets.
+- **Embeddings**: dim 3840, batch-vs-solo drift < 1e-4 (patch 0001 holds on
+  Metal), work concurrently with chat and alongside the MTP drafter.
+- **Multimodal**: image OCR verified through CPU-side mmproj
+  (`--no-mmproj-offload` mandatory as documented above).
+- **KV persistence**: save → erase → restore → reuse verified
+  (`cache_n` = 219 of 219 restored).
 
 ## CUDA specifics
 

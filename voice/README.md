@@ -1,5 +1,38 @@
 # Voice replies (Kokoro sidecar + web UI injection)
 
+## Mac quickstart (native TTS.cpp sidecar — verified M1 Pro, 2026-07-06)
+
+No Python, no espeak, CPU-only (never contends with the LLM for Metal):
+
+```sh
+# one-time: build the sidecar + fetch the self-phonemizing Kokoro GGUF (178 MB)
+git clone --recursive --depth 1 https://github.com/mmwillet/TTS.cpp .scratch/TTS.cpp
+cmake -S .scratch/TTS.cpp -B .scratch/TTS.cpp/build \
+  -DCMAKE_BUILD_TYPE=Release -DGGML_METAL=OFF -DGGML_CUDA=OFF -DTTS_BUILD_EXAMPLES=ON
+make -C .scratch/TTS.cpp/build -j
+cp .scratch/TTS.cpp/build/bin/tts-server bin/
+curl -fsSL -o models/Kokoro_no_espeak_Q4.gguf \
+  "https://huggingface.co/mmwillet2/Kokoro_GGUF/resolve/main/Kokoro_no_espeak_Q4.gguf?download=true"
+
+# then just:
+make serve       # spawns the sidecar and proxies /tts automatically
+```
+
+`scripts/serve.sh` auto-detects `bin/tts-server` + the GGUF, spawns the
+sidecar on 8091 with `-nt 4` and pre-warms it, and sets `LLAMAFILE_TTS_PORT`
+so the server's built-in `/tts` reverse proxy (patches/lf-0003) activates —
+the web UI probes `/tts/health` and shows the read-aloud ▶ controls
+automatically. Thread count matters a lot on Apple Silicon: `-nt 4` measures
+RTF 0.48 on M1 Pro while the hardware-concurrency default (10, spilling onto
+efficiency cores) is 3–8× slower; `GEMMA4_TTS_THREADS` overrides. Do NOT use
+`--use-metal` — it crashes this ggml vintage on Kokoro's ops (same
+kernel-vintage class as the mmproj Metal assert). The mic 🎙
+(speech input) needs no sidecar at all: audio goes to the model itself via
+the mmproj (verified word-perfect transcription on M1 Pro).
+
+For the packaged `gemma4-server.llamafile`, start the sidecar yourself and
+export `LLAMAFILE_TTS_PORT=8091` before launching.
+
 - `kokoro_server.py` — CPU-only TTS sidecar for CT deployment (`/opt/kokoro/` +
   venv with kokoro-onnx + soundfile + espeak-ng; model files kokoro-v1.0.onnx +
   voices-v1.0.bin from thewh1teagle/kokoro-onnx releases). systemd unit

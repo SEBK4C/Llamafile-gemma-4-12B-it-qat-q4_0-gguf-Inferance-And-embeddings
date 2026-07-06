@@ -18,5 +18,7 @@ __pycache__/
 *.pyc
 .DS_Store
 .kvcache/
+.kvcache-test/
 .gemma4-kv/
 bench/results.tsv
+package/.prewarm-xnu-slot-0.bin
