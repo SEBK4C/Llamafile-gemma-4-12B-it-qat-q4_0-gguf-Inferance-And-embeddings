@@ -61,7 +61,7 @@ Legend: ✅ verified (with number/date) · ⏳ expected-works, unverified ·
 | 16 | Baked voice APE (`/zip/tts-server.ape` spawn) | packaged bare run | ✅ artifact only — **spawner source never pushed** | ❌ blocked on missing `voice.c`; Mac equivalent = external sidecar (row 12); cosmocc TTS.cpp port = open work (`voice/BAKED-VOICE.md`) |
 | 17 | Platform default args (one artifact, per-OS profiles) | bare packaged run, startup config lines | ✅ unchanged `.args` path | ✅ `.args.xnu` verified 19.9 tok/s bare (07-06) |
 | 18 | Hardware autotune (v0.3, `LLAMAFILE_NO_AUTOTUNE`) | bare run on odd hardware | ✅ artifact | ❓ source location unknown to Mac agent — superseded on Mac by #17; **CUDA agent: confirm where v0.3 autotune lives** |
-| 19 | CUDA DSO baked (TinyBLAS + 0016/0017) | packaged run on NVIDIA | ✅ | ➖ (not baked in Mac-built package — build `ggml-cuda.so` before publishing a universal artifact) |
+| 19 | CUDA DSO baked (TinyBLAS + 0016/0017) | packaged run on NVIDIA | ⏳ v0.7.0-universal carries the byte-identical v0.6.1 DSO — **run one CUDA smoke (api_probe) on the universal file** | ✅ DSO presence doesn't affect Metal (clean-room verified 07-07) |
 | 20 | Duplicate-launch helper + `--clear-all` (v0.3) | launch twice / flag | ✅ artifact | ❓ same as #18 — source location unconfirmed |
 | 21 | External ingest worker (OCR/PDF/audio → Python) | `bench/ingest/ingest_worker.py` | ✅ CT deployment | ➖ CT-only by design until OCR runtime is APE-portable |
 | 22 | Serving-defaults ratchet (autoresearch ledger + gates) | `bench/serve_bench.py` / `mac_serve_bench.py` | ✅ baseline + E1–E15 | ✅ Mac baseline landed 07-06 (66.9 composite); candidate queued |

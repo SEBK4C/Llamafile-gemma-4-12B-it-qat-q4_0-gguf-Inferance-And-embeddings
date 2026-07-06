@@ -14,10 +14,13 @@ the v0.5.0 sampler + WebUI defaults. On every other OS it reads the standard
 CUDA-tuned defaults produced on Macs: **19.9 tok/s bare-launch steady state**
 (21.5–22.2 via `make serve` with external GGUFs).
 
-The Metal artifact carries no CUDA DSO — NVIDIA users keep
-`gemma4-server.llamafile` (v0.6.1). Baking the DSO into a build of this
-branch produces the true universal file (CUDA-agent handoff item,
-`docs/FEATURE-PARITY.md` row 19).
+**v0.7.0-universal is one file for every backend**: the CUDA TinyBLAS DSO
+from the v0.6.1 build (byte-identical blob, which passed that release's
+CUDA e2e) is baked alongside the Metal profile, prewarm state and embed
+payload. One `gemma4-server.llamafile` on HF serves NVIDIA, Apple Silicon
+and CPU. Handoff item (`docs/FEATURE-PARITY.md` row 19): one CUDA smoke
+run of the universal file to confirm the transplanted DSO against this
+build's binary.
 
 ## Voice on Mac, both directions
 
