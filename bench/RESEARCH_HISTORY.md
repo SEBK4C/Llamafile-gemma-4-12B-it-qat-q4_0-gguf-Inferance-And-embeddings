@@ -1525,6 +1525,28 @@ loop). VARIETY/EM/Q backlog resumes post-release.
   MRR 0.955.** Remaining refinements: Q4 verify-pass A/B, I10 contention
   doc. The release remains staged awaiting the prod-pause go.
 
+## Q4 ✅ (2026-07-06) — verify-pass REJECTED with data; Q-family COMPLETE
+- Same 48 Q3 seeds, one grammar-bool verify call each (temp 0, thinking
+  off, DRY, cached prefix — 0.18 s/call): **100% on the four classes the
+  deterministic gate already catches (pure redundancy), only 1/3 on the
+  unit_swap blind spot it was supposed to cover, and F26 — it REJECTS
+  verbatim TRUTH on noisy OCR sources: substr_true 5/10, reorder_name
+  0/9, reformat_date 1/3.** The feared failure (verifier shares generator
+  priors) was not the one that materialized; the real failure is
+  over-caution when the source is OCR soup — the verification-is-easier
+  asymmetry does not survive noisy grounds.
+- **Ship decision: the pipeline keeps the DETERMINISTIC GATE ONLY.**
+  Residual risk = unit_swap class: quantified (gate 0%, verifier 33%),
+  bounded (flag-only prose numbers still catch the unit's absence
+  context-free), and NEVER observed in real model output across 100+
+  enrichments — synthetic-only so far. Revisit only if VARIETY-scale
+  corpora surface real instances.
+- **The Q-family Sebastian commissioned is complete**: Q1 gate shipped +
+  calibrated, Q2 labeled rates (100% key-field, 0% false-drop, 6.7%
+  halluc), Q3 seeded catch-rates (100% on claimed classes), Q4 second-
+  opinion rejected with measurements, Q5 policy = shipped drop/flag
+  defaults. Every checker in the stack has a measured catch-rate.
+
 - **Phase-3 core is now demonstrably COMPLETE end-to-end** (ingest →
   enrich → gate → chunk → embed → store → hybrid query). Remaining:
   EM2/EM6/Q4 refinements, I10 contention doc, and the v0.6.0
