@@ -56,7 +56,7 @@ Legend: ✅ verified (with number/date) · ⏳ expected-works, unverified ·
 | 11 | Web UI (b9578) + baked ui-config (Constitution + E15 decline + sampler) | `/props` ui_settings; headless Chrome | ✅ | ✅ rendered + screenshot-verified (07-06); browser-cache gotcha documented |
 | 12 | Voice out: karaoke read-aloud + injected controls | UI click / `/tts/health` via proxy | ✅ kokoro-onnx sidecar (espeak G2P) | ✅ TTS.cpp sidecar RTF 0.48 (`-nt 4`, pre-warmed) |
 | 13 | TTS pronunciation quality | `tests/tts_roundtrip.py` | ✅ espeak-ng G2P (kokoro-onnx) | ✅ espeak build + `Kokoro_espeak_Q4.gguf` default, roundtrip 5/5×2 (07-06); no_espeak garbles ("specificus") — fallback only |
-| 14 | Voice in: mic button (records WAV → audio input) | UI; DOM check | ✅ | ✅ g4v-micwrap rendered (07-06) |
+| 14 | Voice in: mic button (records WAV → audio input) | UI; DOM check | ✅ | ✅ works; KNOWN BUG: button can hide until an audio file is attached (DOM-anchor quirk, v0.7.0 notes) |
 | 15 | Barge-in + spoken UI commands (v0.4-alpha) | manual demo | ✅ (alpha, CT) | ⏳ browser-side code ships in injection; needs manual Mac demo pass |
 | 16 | Baked voice APE (`/zip/tts-server.ape` spawn) | packaged bare run | ✅ artifact only — **spawner source never pushed** | ❌ blocked on missing `voice.c`; Mac equivalent = external sidecar (row 12); cosmocc TTS.cpp port = open work (`voice/BAKED-VOICE.md`) |
 | 17 | Platform default args (one artifact, per-OS profiles) | bare packaged run, startup config lines | ✅ unchanged `.args` path | ✅ `.args.xnu` verified 19.9 tok/s bare (07-06) |
