@@ -146,6 +146,32 @@ if [ "${GEMMA4_EMBED:-1}" = "1" ] && [ -f "$EMBED_GGUF" ]; then
     export LLAMAFILE_EMBED_PORT
 fi
 
+# System-prompt prewarm: once the server is up, one 1-token request carrying
+# the WebUI default system prompt loads its KV into a slot, so the user's
+# first real message skips that prefill (autosave then persists it across
+# graceful restarts). Runs detached; GEMMA4_PREWARM=0 disables.
+if [ "${GEMMA4_PREWARM:-1}" = "1" ] && [ -f "$UI_CONFIG" ]; then
+    (
+        for _ in $(seq 1 120); do
+            [ "$(curl -s -o /dev/null -w '%{http_code}' "http://${GEMMA4_HOST:-127.0.0.1}:${GEMMA4_PORT:-8080}/health" 2>/dev/null)" = "200" ] && break
+            sleep 1
+        done
+        python3 - "$UI_CONFIG" "http://${GEMMA4_HOST:-127.0.0.1}:${GEMMA4_PORT:-8080}" <<'PYEOF' >/dev/null 2>&1
+import json, sys, urllib.request
+cfg = json.load(open(sys.argv[1]))
+body = json.dumps({
+    "messages": [{"role": "system", "content": cfg.get("systemMessage", "")},
+                  {"role": "user", "content": "Hi"}],
+    "max_tokens": 1, "temperature": 0, "cache_prompt": True, "stream": False,
+}).encode()
+urllib.request.urlopen(urllib.request.Request(
+    sys.argv[2] + "/v1/chat/completions", body,
+    {"Content-Type": "application/json"}), timeout=300).read()
+PYEOF
+        echo "prewarm: system-prompt KV loaded" >&2
+    ) &
+fi
+
 # Server-wide sampler defaults — same recipe the packaged .args bake
 # (v0.5.0 ship: Gemma 4 official sampler + DRY anti-loop). Without these the
 # source-tree route runs llama.cpp stock defaults, where greedy-ish sampling

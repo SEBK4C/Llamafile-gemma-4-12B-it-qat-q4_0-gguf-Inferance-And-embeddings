@@ -77,6 +77,18 @@ if [ -f "$EMBED_GGUF" ]; then
 else
     echo "note: $EMBED_GGUF missing — packaging without baked embeddings"
 fi
+# Shipped system-prompt prewarm (Mac Metal profile): a pre-computed slot-0
+# KV state holding the WebUI default system prompt. Extracted to the slot
+# save dir at first startup (server-context.cpp autorestore, Xnu only) so
+# even the very first message skips the system-prompt prefill. Geometry
+# must match .args.xnu (-c 8192 -np 2 -> 4096/slot); regenerate with
+# scripts/make-prewarm-state.sh after any prompt or geometry change.
+PREWARM_XNU="${ROOT}/package/.prewarm-xnu-slot-0.bin"
+if [ -f "$PREWARM_XNU" ]; then
+    EXTRA="$EXTRA $PREWARM_XNU"
+else
+    echo "note: $PREWARM_XNU missing — packaging without Mac prewarm state"
+fi
 # ui-config.json holds the default WebUI settings (system prompt + sampler);
 # referenced by --ui-config-file /zip/ui-config.json in .args (a file avoids the
 # .args double-quote stripping that breaks inline --ui-config JSON).

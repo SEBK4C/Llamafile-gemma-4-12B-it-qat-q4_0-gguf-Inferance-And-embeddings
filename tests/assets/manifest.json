@@ -1,0 +1,97 @@
+{
+ "audio": {
+  "receipt-total.wav": {
+   "transcript": "The total amount on the receipt is forty seven dollars and twenty cents.",
+   "key_words": [
+    "forty",
+    "seven",
+    "dollars",
+    "twenty",
+    "cents"
+   ]
+  },
+  "meeting-date.wav": {
+   "transcript": "The project review meeting is scheduled for March twelfth at ten thirty.",
+   "key_words": [
+    "march",
+    "twelfth",
+    "ten",
+    "thirty"
+   ],
+   "known_spiral": true,
+   "note": "date/time numerals trigger a reasoning-channel spiral on current defaults (multilingual re-reading loop, finish=length, empty content) \u2014 the canary for the reasoning-budget ratchet candidate; expected-fail until that ships"
+  },
+  "fox-pangram.wav": {
+   "transcript": "The quick brown fox jumps over the lazy dog.",
+   "key_words": [
+    "quick",
+    "brown",
+    "jumps",
+    "over",
+    "lazy"
+   ]
+  }
+ },
+ "images": {
+  "invoice.png": {
+   "facts": [
+    "INV-2047",
+    "385.00",
+    "2026-06-15",
+    "Truecarbon"
+   ],
+   "ask": "Read this document. What is the invoice number and the total due?",
+   "expect_any": [
+    "INV-2047"
+   ],
+   "expect_all": [
+    "385"
+   ]
+  },
+  "sign.png": {
+   "facts": [
+    "CAUTION",
+    "42B"
+   ],
+   "ask": "What does this sign say?",
+   "expect_any": [
+    "caution"
+   ],
+   "expect_all": [
+    "42B"
+   ]
+  },
+  "chart.png": {
+   "facts": [
+    "CUDA 105",
+    "Metal 22",
+    "CPU 5"
+   ],
+   "ask": "This is a chart. Which backend is fastest and what is its value?",
+   "expect_any": [
+    "cuda"
+   ],
+   "expect_all": [
+    "105"
+   ]
+  }
+ },
+ "pdfs": {
+  "receipt.pdf": {
+   "text_file": "receipt.pdf.txt",
+   "expect_entities_any": [
+    "108.40",
+    "R-88231"
+   ],
+   "query": "how much was the hardware store total"
+  },
+  "policy.pdf": {
+   "text_file": "policy.pdf.txt",
+   "expect_entities_any": [
+    "2026-01-01",
+    "500"
+   ],
+   "query": "how many remote days per week are allowed"
+  }
+ }
+}

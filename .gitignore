@@ -21,3 +21,4 @@ __pycache__/
 .kvcache-test/
 .gemma4-kv/
 bench/results.tsv
+package/.prewarm-xnu-slot-0.bin

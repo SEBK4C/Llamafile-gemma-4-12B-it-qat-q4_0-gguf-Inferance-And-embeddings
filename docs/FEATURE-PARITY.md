@@ -65,6 +65,8 @@ Legend: ✅ verified (with number/date) · ⏳ expected-works, unverified ·
 | 20 | Duplicate-launch helper + `--clear-all` (v0.3) | launch twice / flag | ✅ artifact | ❓ same as #18 — source location unconfirmed |
 | 21 | External ingest worker (OCR/PDF/audio → Python) | `bench/ingest/ingest_worker.py` | ✅ CT deployment | ➖ CT-only by design until OCR runtime is APE-portable |
 | 22 | Serving-defaults ratchet (autoresearch ledger + gates) | `bench/serve_bench.py` / `mac_serve_bench.py` | ✅ baseline + E1–E15 | ✅ Mac baseline landed 07-06 (66.9 composite); candidate queued |
+| 23 | Shipped system-prompt prewarm (baked slot-0 KV state) | clean-dir bare run: `extracted baked prewarm state` + first msg `cache_n≈310` | ➖ not shipped (CUDA agent: adopt via `scripts/make-prewarm-state.sh` + a `.prewarm-linux` profile if desired) | ✅ clean-room verified: autorestored 316 tok, first msg cache_n=310/prompt_n=11 (07-06) |
+| 24 | Multimodal upload corpus + probe (`tests/assets/`, `tests/upload_ingest_probe.py`) | `python3 tests/upload_ingest_probe.py` | ⏳ run on CT | ✅ images 3/3, ingest 2/2, retrieval 2/2, audio 2/2 + 1 known-spiral canary (07-06) |
 
 ## Latest full-probe results
 
@@ -103,3 +105,10 @@ python3 bench/serve_bench.py --candidate bench/candidates/<c>.json      # CT
 - temp=0 + small budgets ⇒ empty `content` (thinking channel) — test with the
   official sampler and ≥512-token budgets on BOTH platforms.
 - Measure decode clean-state only; post-battery numbers read ~20% low.
+- Date/time numerals in audio transcription trigger a reasoning-channel
+  spiral (multilingual re-reading loop, empty content even at 4 k budget) —
+  canary clip: `tests/assets/audio/meeting-date.wav`. Target of the queued
+  reasoning-budget ratchet candidate; note the per-request
+  `reasoning_budget_*` fields clip the sampler correctly but the forced
+  end-tag currently trips Gemma 4's channel parser (500) — tag format needs
+  iteration before the candidate runs.
