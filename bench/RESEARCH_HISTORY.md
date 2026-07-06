@@ -1462,3 +1462,24 @@ loop). VARIETY/EM/Q backlog resumes post-release.
 - **EM queue remaining**: EM2 (doc-composite fields, H-B) — needs
   enrichment re-runs, a fuller tick; EM5/EM6 wait on I6-chunk-variants /
   I9 store. VARIETY's 100-file batch still queued.
+
+## VARIETY milestone ✅ (2026-07-06) — 87-file mixed batch: 0 failures
+- **The batch**: 87 files across 8 source types (71 photos — Flickr
+  people, CORD receipts topped to 30, FUNSD forms; 10 audio incl. ESC-50
+  clips and the silence WAV; text/scan/mixed PDFs; CSV; code; markdown)
+  through the FROZEN worker (pipeline C=2 · v1+DRY · medium OCR@8thr ·
+  qwen3-last sidecar@8thr).
+- **Results**: **87/87 done, 0 failures, 19.38 docs/min** (≥ P1's 22-file
+  18.77 despite audio in the mix); enrichment busy 516.6 s across 2 slots
+  ≈ 96% of wall — the pipeline stays enrichment-saturated at scale, so
+  P-sprint conclusions hold. **Schema validity 87/87 at scale.** Entity
+  grounding 381/457 = **83.4%**, statistically indistinguishable from
+  Q1's 83.7% on 22 files — the fidelity metric is stable across
+  populations. The quality-flag vocabulary works unprompted in the wild:
+  `low_legibility` ×10, `partial_document` ×21, `crumpled_document`,
+  `rotated_text`, `blurry_image`, and `no_speech_content` on the silence
+  WAV. Zero failures → no new failure-fixtures to promote.
+- **Phase picture**: P-sprint frozen config validated at 4× the original
+  batch size and full modality diversity. Remaining before I9 (the phase
+  gate): EM2, Q4, and the hybrid store itself. v0.6.0 publish still
+  awaits the prod-pause go.
