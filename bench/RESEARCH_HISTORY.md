@@ -1508,6 +1508,23 @@ loop). VARIETY/EM/Q backlog resumes post-release.
   the fusion weighting (dense-favored RRF, or reserve BM25 for
   exact-token classes: IDs, codes, amounts). Until then the query router
   default is DENSE-first.
+## EM2 ✅ + EM6 ✅ (2026-07-06) — retrieval headline upgraded to 0.929/0.955
+- **EM6 fusion sweep**: dense unbeaten (0.933 MRR); every always-fuse RRF
+  costs (1:1 0.909 … 5:1 0.924); the exact-token ROUTER (dense-first,
+  BM25 fused 3:1 only on digit-bearing queries) == dense exactly and
+  protects rare-ID lookups → shipped as query default. Re-sweep mandatory
+  at 1000+ docs where dense rare-token misses should appear.
+- **EM2 composite sweep on STORED enrichments** (no GPU): summary-only
+  0.714 MRR (title/scene/entities all earn their place); transcript-append
+  neutral; **lead-chunk grounding (composite + chunk0[:400]) WINS —
+  hit@1 0.881→0.929, MRR 0.933→0.955** — verbatim lead text anchors the
+  doc vector; photos unaffected (their lead chunk is the summary
+  fallback). `doc_text_of` updated; store rebuilt; numbers REPRODUCED
+  through the shipped path (dense == router at 0.929/0.976/0.955).
+- **The I9 phase-gate headline is now hit@1 0.929 · hit@3 0.976 ·
+  MRR 0.955.** Remaining refinements: Q4 verify-pass A/B, I10 contention
+  doc. The release remains staged awaiting the prod-pause go.
+
 - **Phase-3 core is now demonstrably COMPLETE end-to-end** (ingest →
   enrich → gate → chunk → embed → store → hybrid query). Remaining:
   EM2/EM6/Q4 refinements, I10 contention doc, and the v0.6.0
