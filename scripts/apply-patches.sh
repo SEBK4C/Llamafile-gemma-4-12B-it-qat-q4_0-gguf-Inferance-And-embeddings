@@ -27,6 +27,10 @@ for p in "${ROOT}"/patches/lf-*.patch; do
 done
 
 cd "${ROOT}/vendor/llamafile/llama.cpp"
+if [ -f .gemma4-source-true ]; then
+    echo "llama.cpp is a source-true checkout — patch series lives in-tree (patches/archive/ is provenance)."
+    exit 0
+fi
 for p in "${ROOT}"/patches/[0-9]*.patch; do
     [ -e "$p" ] && apply "$p"
 done
