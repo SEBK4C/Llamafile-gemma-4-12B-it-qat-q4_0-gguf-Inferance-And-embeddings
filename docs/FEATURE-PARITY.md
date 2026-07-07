@@ -68,6 +68,20 @@ Legend: ✅ verified (with number/date) · ⏳ expected-works, unverified ·
 | 23 | Shipped system-prompt prewarm (baked slot-0 KV state) | clean-dir bare run: `extracted baked prewarm state` + first msg `cache_n≈310` | ➖ not shipped (CUDA agent: adopt via `scripts/make-prewarm-state.sh` + a `.prewarm-linux` profile if desired) | ✅ clean-room verified: autorestored 316 tok, first msg cache_n=310/prompt_n=11 (07-06) |
 | 24 | Multimodal upload corpus + probe (`tests/assets/`, `tests/upload_ingest_probe.py`) | `python3 tests/upload_ingest_probe.py` | ⏳ run on CT | ✅ images 3/3, ingest 2/2, retrieval 2/2, audio 2/2 + 1 known-spiral canary (07-06) |
 
+## Source reproducibility (closed 2026-07-07)
+
+The nested llama.cpp drift is reconciled: the composed verified tree is a
+pushed fork branch (`SEBK4C/llama.cpp@gemma4-v0.7.x`, `.gemma4-source-true`
+marker; UI assets + voice injection committed — hermetic builds). CT's
+drift was fully subsumed (35/35 server hunks already present; the one
+missing piece, the soft_max zero-sum CPU diagnostic, is adopted). Both
+apply-patches scripts skip source-true checkouts; the NNNN patch series is
+archived as provenance. Acceptance: cold `git clone` → `make setup` →
+build → binary boots with autotune — verified end-to-end (the first run
+even caught a case-insensitive-gitignore omission of BUILD.mk, since
+fixed). CT-local future changes now have a push lane: rebase onto the fork
+branch.
+
 ## Latest full-probe results
 
 | date | platform | api_probe | notes |
